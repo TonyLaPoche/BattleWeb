@@ -81,19 +81,20 @@ export const Grid = ({
   };
 
   return (
-    <div className={`inline-block ${className}`}>
-      <div className="grid gap-1 p-4 bg-gradient-to-br from-blue-800 to-blue-900 rounded-lg shadow-xl border-2 border-blue-700"
+    <div className={`inline-block w-full max-w-full ${className}`}>
+      <div className="grid gap-0.5 sm:gap-1 p-2 sm:p-4 bg-gradient-to-br from-blue-800 to-blue-900 rounded-lg shadow-xl border-2 border-blue-700 mx-auto"
            style={{
-             gridTemplateColumns: showCoordinates ? `auto repeat(${BOARD_SIZE}, 1fr)` : `repeat(${BOARD_SIZE}, 1fr)`,
-             gridTemplateRows: showCoordinates ? `auto repeat(${BOARD_SIZE}, 1fr)` : `repeat(${BOARD_SIZE}, 1fr)`
+             gridTemplateColumns: showCoordinates ? `auto repeat(${BOARD_SIZE}, minmax(0, 1fr))` : `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
+             gridTemplateRows: showCoordinates ? `auto repeat(${BOARD_SIZE}, minmax(0, 1fr))` : `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
+             maxWidth: '100%',
            }}>
 
         {/* Coordonnées des colonnes (A-L) */}
         {showCoordinates && (
           <>
-            <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12"></div> {/* Coin supérieur gauche vide */}
+            <div className="min-w-[20px] min-h-[20px] sm:min-w-[24px] sm:min-h-[24px] md:min-w-[32px] md:min-h-[32px] aspect-square"></div> {/* Coin supérieur gauche vide */}
             {Array.from({ length: BOARD_SIZE }, (_, i) => (
-              <div key={`col-${i}`} className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 flex items-center justify-center text-white font-bold text-xs sm:text-sm bg-blue-700/50 rounded">
+              <div key={`col-${i}`} className="min-w-[20px] min-h-[20px] sm:min-w-[24px] sm:min-h-[24px] md:min-w-[32px] md:min-h-[32px] aspect-square flex items-center justify-center text-white font-bold text-[10px] sm:text-xs md:text-sm bg-blue-700/50 rounded">
                 {String.fromCharCode(65 + i)} {/* A, B, C, ... L */}
               </div>
             ))}
@@ -105,7 +106,7 @@ export const Grid = ({
           <div key={`row-${y}`} className="contents">
             {/* Coordonnée de la ligne (1-12) */}
             {showCoordinates && (
-              <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 flex items-center justify-center text-white font-bold text-xs sm:text-sm bg-blue-700/50 rounded">
+              <div className="min-w-[20px] min-h-[20px] sm:min-w-[24px] sm:min-h-[24px] md:min-w-[32px] md:min-h-[32px] aspect-square flex items-center justify-center text-white font-bold text-[10px] sm:text-xs md:text-sm bg-blue-700/50 rounded">
                 {y + 1}
               </div>
             )}
@@ -118,7 +119,7 @@ export const Grid = ({
                 data-x={x}
                 data-y={y}
                 className={`
-                  w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 border-2 rounded transition-all duration-200 touch-none
+                  min-w-[20px] min-h-[20px] sm:min-w-[24px] sm:min-h-[24px] md:min-w-[32px] md:min-h-[32px] aspect-square border border-1 sm:border-2 rounded transition-all duration-200 touch-none
                   ${getCellColor(cell)}
                   ${getCellCursor(cell)}
                   ${onCellClick && cell !== 'hit' && cell !== 'miss' && cell !== 'revealed' && cell !== 'revealed_ship' && cell !== 'revealed_empty' ? 'hover:scale-110 active:scale-95 hover:shadow-lg' : ''}

@@ -7,6 +7,33 @@ import { getGame, subscribeToGame, updateGame, placeBomb, defuseBomb, activateBo
 import { Game, Player, Position, CellState, Bomb } from '@/types/game';
 import { Grid } from '@/components/game/Grid';
 
+// Hook pour calculer la taille des cellules selon la taille d'écran
+function useCellSize() {
+  const [cellSize, setCellSize] = useState(32);
+  const [padding, setPadding] = useState(16);
+
+  useEffect(() => {
+    const updateSize = () => {
+      if (window.innerWidth < 640) {
+        setCellSize(20);
+        setPadding(8);
+      } else if (window.innerWidth < 768) {
+        setCellSize(24);
+        setPadding(16);
+      } else {
+        setCellSize(32);
+        setPadding(16);
+      }
+    };
+
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
+
+  return { cellSize, padding };
+}
+
 export default function GamePage() {
   const router = useRouter();
   const params = useParams();
@@ -18,6 +45,7 @@ export default function GamePage() {
   const [error, setError] = useState('');
   const [actionMode, setActionMode] = useState<'shot' | 'bomb'>('shot'); // Mode d'action : tir ou bombe
   const [playerChoice, setPlayerChoiceState] = useState<'lobby' | 'menu' | null>(null); // Choix du joueur actuel
+  const { cellSize, padding } = useCellSize();
 
   // Charger la partie et écouter les changements
   useEffect(() => {
@@ -444,21 +472,21 @@ export default function GamePage() {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-3 sm:mb-4 text-center sm:text-left">
             ⚔️ Partie en cours
           </h1>
-          <div className="flex flex-wrap items-center gap-4">
-            <div className={`px-5 py-3 rounded-xl font-bold shadow-lg transition-all ${
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 sm:gap-4">
+            <div className={`px-3 sm:px-5 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base shadow-lg transition-all ${
               isCurrentTurn 
                 ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse' 
                 : 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700'
             }`}>
               {isCurrentTurn ? '🎯 C\'est votre tour !' : `⏳ Tour de ${currentPlayerTurn?.name || '...'}`}
             </div>
-            <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 text-gray-700 font-semibold">
+            <div className="px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 text-gray-700 font-semibold text-sm sm:text-base">
               👥 Joueurs vivants: <span className="text-blue-600">{game.players.filter(p => p.isAlive).length}/{game.players.length}</span>
             </div>
             
@@ -505,9 +533,9 @@ export default function GamePage() {
         </div>
 
         {/* Légende des couleurs */}
-        <div className="mb-6 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg border-2 border-gray-200 p-5">
-          <h3 className="text-xl font-bold text-gray-900 mb-4">🎨 Légende</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="mb-4 sm:mb-6 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg border-2 border-gray-200 p-3 sm:p-5">
+          <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-3 sm:mb-4 text-center sm:text-left">🎨 Légende</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-4">
             <div className="flex items-center space-x-2">
               <div className="w-6 h-6 bg-red-600 border-2 border-red-700 rounded shadow-inner"></div>
               <span className="text-sm text-gray-700 font-medium">Touché</span>
@@ -549,17 +577,18 @@ export default function GamePage() {
         )}
 
         {/* Grilles des adversaires */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6">
           {opponents.map((opponent) => (
-            <div key={opponent.id} className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-xl border-2 border-gray-200 p-6">
-              <h2 className="text-2xl font-bold mb-4 flex items-center" style={{ color: opponent.color }}>
-                <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: opponent.color }}></span>
+            <div key={opponent.id} className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-xl border-2 border-gray-200 p-3 sm:p-6">
+              <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-4 flex items-center justify-center sm:justify-start" style={{ color: opponent.color }}>
+                <span className="w-3 h-3 sm:w-4 sm:h-4 rounded-full mr-2" style={{ backgroundColor: opponent.color }}></span>
                 {opponent.name}
-                {!opponent.isAlive && <span className="ml-2 text-red-500 text-xl">💀</span>}
+                {!opponent.isAlive && <span className="ml-2 text-red-500 text-lg sm:text-xl">💀</span>}
               </h2>
               
-              <div className="flex justify-center relative">
-                <Grid
+              <div className="flex justify-center relative overflow-x-auto">
+                <div className="inline-block">
+                  <Grid
                   cells={getOpponentGrid(opponent)}
                   onCellClick={
                     isCurrentTurn && opponent.isAlive
@@ -569,18 +598,20 @@ export default function GamePage() {
                       : undefined
                   }
                   interactive={!!(isCurrentTurn && opponent.isAlive)}
-                  showCoordinates={true}
-                  className="shadow-md"
-                />
+                    showCoordinates={true}
+                    className="shadow-md"
+                  />
+                </div>
                 
                 {/* Afficher les bombes actives sur cette grille */}
                 {game.players
                   .flatMap(p => p.bombsPlaced.filter(b => b.targetPlayerId === opponent.id && !b.detonated && !b.defused))
                   .map(bomb => {
                     const turnsRemaining = Math.max(0, bomb.activatesAtTurn - (game.currentTurn || 0));
-                    // Calcul du positionnement : padding (16px) + coordonnées (36px) + position * 36px + centre de la case (16px)
-                    const left = 16 + 36 + bomb.position.x * 36 + 16;
-                    const top = 16 + 36 + bomb.position.y * 36 + 16;
+                    // Calcul du positionnement adaptatif selon la taille d'écran
+                    const coordSize = cellSize;
+                    const left = padding + coordSize + bomb.position.x * cellSize + cellSize / 2;
+                    const top = padding + coordSize + bomb.position.y * cellSize + cellSize / 2;
                     return (
                       <div
                         key={bomb.id}
@@ -612,14 +643,16 @@ export default function GamePage() {
         </div>
 
         {/* Votre grille (pour référence) */}
-        <div className="mt-8 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-xl border-2 border-gray-200 p-6">
-          <h2 className="text-2xl font-bold mb-4 text-gray-800">⚓ Votre grille</h2>
-          <div className="flex justify-center relative">
-            <Grid
-              cells={currentPlayer.board.cells}
-              showCoordinates={true}
-              className="shadow-md"
-            />
+        <div className="mt-4 sm:mt-8 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-xl border-2 border-gray-200 p-3 sm:p-6">
+          <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-800 text-center sm:text-left">⚓ Votre grille</h2>
+          <div className="flex justify-center relative overflow-x-auto">
+            <div className="inline-block">
+              <Grid
+                cells={currentPlayer.board.cells}
+                showCoordinates={true}
+                className="shadow-md"
+              />
+            </div>
             
             {/* Afficher les bombes actives sur votre grille avec bouton de désamorçage */}
             {game.players
@@ -627,9 +660,10 @@ export default function GamePage() {
               .map(bomb => {
                 const turnsRemaining = Math.max(0, bomb.activatesAtTurn - (game.currentTurn || 0));
                 const bombOwner = game.players.find(p => p.id === bomb.ownerId);
-                // Calcul du positionnement : padding (16px) + coordonnées (36px) + position * 36px + centre de la case (16px)
-                const left = 16 + 36 + bomb.position.x * 36 + 16;
-                const top = 16 + 36 + bomb.position.y * 36 + 16;
+                // Calcul du positionnement adaptatif selon la taille d'écran
+                const coordSize = cellSize;
+                const left = padding + coordSize + bomb.position.x * cellSize + cellSize / 2;
+                const top = padding + coordSize + bomb.position.y * cellSize + cellSize / 2;
                 return (
                   <div
                     key={bomb.id}
