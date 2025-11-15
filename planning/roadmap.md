@@ -12,12 +12,12 @@ Le développement sera découpé en **4 phases majeures** avec des livrables inc
 - Logique de jeu 1vs1 locale
 
 ### Tâches techniques
-- [ ] Configuration du projet React/TypeScript
-- [ ] Setup Firebase (Auth, Firestore, Hosting)
-- [ ] Création des composants de base (Grid, Ship)
-- [ ] Implémentation de la logique de placement des navires
-- [ ] Système de tir basique
-- [ ] Interface mobile responsive
+- [x] Configuration du projet React/TypeScript
+- [x] Setup Firebase (Auth, Firestore, Hosting)
+- [x] Création des composants de base (Grid, Ship)
+- [x] Implémentation de la logique de placement des navires
+- [x] Système de tir basique
+- [x] Interface mobile responsive
 
 ### Livrables
 - Application installable (PWA)
@@ -39,12 +39,12 @@ Le développement sera découpé en **4 phases majeures** avec des livrables inc
 - Parties en ligne 1vs1
 
 ### Tâches techniques
-- [ ] Implémentation des WebSockets/Firebase Realtime
-- [ ] Création du système de lobby
-- [ ] Gestion des états de jeu synchronisés
-- [ ] Validation des mouvements côté serveur
-- [ ] Gestion des déconnexions
-- [ ] Chat intégré
+- [x] Implémentation des WebSockets/Firebase Realtime
+- [x] Création du système de lobby
+- [x] Gestion des états de jeu synchronisés
+- [x] Validation des mouvements côté serveur
+- [x] Gestion des déconnexions
+- [x] Chat intégré
 
 ### Livrables
 - Création/rejoindre des parties
@@ -66,12 +66,20 @@ Le développement sera découpé en **4 phases majeures** avec des livrables inc
 - Fonctionnalités sociales
 
 ### Tâches techniques
-- [ ] Logique des bombes de détection
-- [ ] Système de désamorçage
-- [ ] Adaptation du jeu pour 3+ joueurs
-- [ ] Gestion des tours multi-joueurs
-- [ ] Statistiques de jeu
-- [ ] Système d'amis
+- [x] Logique des bombes de détection
+- [x] Système de désamorçage (avec pénalité de 2 tours)
+- [x] Adaptation du jeu pour 3 joueurs (1v1v1)
+- [x] Gestion des tours multi-joueurs avec sélection de cible
+- [x] Système de timer par tour (configurable)
+- [x] Gestion de fin de partie avec choix retour lobby/menu
+- [x] Système d'abandon
+- [x] Historique local des parties
+- [x] Profil utilisateur avec modification du nom
+- [x] Réinitialisation de mot de passe
+- [x] Nettoyage automatique des parties terminées
+- [x] Système de reprise de parties actives
+- [ ] Statistiques de jeu (à implémenter)
+- [ ] Système d'amis (à implémenter)
 
 ### Livrables
 - Toutes les mécaniques spéciales
@@ -81,9 +89,10 @@ Le développement sera découpé en **4 phases majeures** avec des livrables inc
 
 ### Critères de succès
 - ✅ Bombes de détection fonctionnelles
-- ✅ Multi-joueurs stable
+- ✅ Multi-joueurs stable (1v1v1)
 - ✅ Balance game équilibrée
 - ✅ UX intuitive
+- ✅ Gestion complète du cycle de vie des parties
 
 ## Phase 4: Polish et Optimisation (2-3 semaines)
 

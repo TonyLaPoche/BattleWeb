@@ -24,7 +24,22 @@ BattleWeb est un jeu de stratégie naval en ligne développé comme Progressive 
 
 ## État du projet
 
-🟡 **Phase de préparation** - Analyse et planification
+🟢 **Phase 3 en cours** - Mécaniques avancées implémentées
+
+### ✅ Fonctionnalités complétées
+- Authentification Firebase (email/password, réinitialisation)
+- Dashboard avec création/rejoindre des parties
+- Lobby avec chat temps réel et paramètres admin
+- Placement automatique des navires (grille 12x12)
+- Système de jeu 1v1 et 1v1v1 avec sélection de cible
+- Bombes de détection avec désamorçage (pénalité 2 tours)
+- Timer par tour configurable
+- Gestion de fin de partie avec retour lobby/menu
+- Système d'abandon
+- Historique local des parties
+- Profil utilisateur
+- Nettoyage automatique des parties terminées
+- Reprise de parties actives depuis le dashboard
 
 ## Structure du projet
 

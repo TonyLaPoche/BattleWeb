@@ -71,7 +71,8 @@ BattleWeb est un jeu de stratégie naval multi-joueurs où les joueurs doivent d
 
 ##### Si désamorcée :
 - **Contre-effet** : Révèle complètement la grille du lanceur de bombe
-- Le désamorceur perd son tour mais obtient une information stratégique majeure
+- Le désamorceur perd **2 tours** (au lieu d'1) mais obtient une information stratégique majeure
+- Le joueur qui désamorce doit sauter 2 tours consécutifs
 
 ## Conditions de victoire
 
@@ -92,6 +93,7 @@ BattleWeb est un jeu de stratégie naval multi-joueurs où les joueurs doivent d
 ### Multi-joueurs (1vs1vs1)
 - **Maximum 3 joueurs** par partie
 - **Tours séquentiels** : Joueur 1 → 2 → 3 → 1...
+- **Sélection de cible** : En mode 1v1v1, le joueur doit choisir quel adversaire attaquer à chaque tour
 - **Gestion des déconnexions** :
   - Attente de 30 secondes pour reconnexion
   - Si non reconnecté : joueur considéré comme mort (défaite)
@@ -126,10 +128,11 @@ BattleWeb est un jeu de stratégie naval multi-joueurs où les joueurs doivent d
 - **Prêt/Absence** des joueurs
 
 ### Pendant la partie
-- **Chat intégré**
-- **Historique des actions**
-- **Timer par tour** (configurable par l'admin)
+- **Chat intégré** (dans le lobby uniquement)
+- **Historique des actions** (local storage)
+- **Timer par tour** (configurable par l'admin, affiché visuellement)
 - **Système de pause automatique** (déconnexions)
+- **Bouton d'abandon** : Permet de se rendre et donner la victoire à l'adversaire
 
 ## Flow Utilisateur Détaillé
 
@@ -137,9 +140,16 @@ BattleWeb est un jeu de stratégie naval multi-joueurs où les joueurs doivent d
 - Formulaire d'inscription/connexion
 - Authentification Email/Mot de passe via Firebase
 
-### Page d'accueil (authentifié)
-- Option : Créer une partie ou Rejoindre via code
-- Historique des parties récentes
+### Dashboard (authentifié)
+- **Créer une partie** : Génère un lobby avec code unique
+- **Rejoindre une partie** : Via code d'invitation
+- **Parties en cours** : Liste des parties actives où le joueur participe
+  - Permet de reprendre une partie en cours
+  - Affiche la phase (lobby, placement, playing)
+  - Indique si le joueur est admin
+- **Historique des parties** : Parties terminées sauvegardées localement
+  - Affiche le gagnant, les joueurs, la date
+  - Limité à 50 parties
 
 ### Création de partie
 - Création automatique d'un lobby
@@ -151,22 +161,42 @@ BattleWeb est un jeu de stratégie naval multi-joueurs où les joueurs doivent d
 - **Admin** peut :
   - Régler les paramètres de partie
   - Activer/désactiver les bombes
-  - Choisir le temps par tour
+  - Définir le nombre de bombes par joueur
+  - Choisir le temps par tour (illimité, 45s, 75s)
+  - Définir le nombre maximum de joueurs (2 ou 3)
   - Lancer la partie (si suffisamment de joueurs)
 - **Joueurs rejoignant par code** :
   - Peuvent uniquement chatter
   - Attend le lancement par l'admin
+- **Quitter le lobby** : 
+  - Si admin quitte et qu'il reste des joueurs, le premier joueur devient admin
+  - Si dernier joueur quitte, le lobby est supprimé
+  - Si lobby vide pendant 30 secondes, suppression automatique
 
 ### Paramètres de partie (configurables par admin)
 - **Activation des bombes** : Oui/Non
-- **Temps par tour** : 30s, 1min, 2min, 5min, illimité
+- **Nombre de bombes par joueur** : 0, 1, 2, 3... (configurable)
+- **Temps par tour** : Illimité, 45s, 75s (configurable)
 - **Choix des couleurs** : Chaque joueur choisit une couleur unique
+- **Nombre maximum de joueurs** : 2 ou 3
 
 ### Phase de jeu
 - Interface de grille 12x12
-- Indicateur de tour actuel
-- Historique des actions
-- Chat toujours disponible
+- Indicateur de tour actuel avec nom du joueur
+- **Sélection de cible** (mode 1v1v1) : Choisir quel adversaire attaquer
+- **Mode d'action** : Basculer entre tir et placement de bombe
+- **Timer visuel** : Affiche le temps restant si limité
+- **Indicateurs de bombes** :
+  - Bombes placées : Affichage visuel sur les grilles
+  - Bombes activées : Zone révélée (5x5)
+  - Bombes désamorcées : Indicateur visuel
+- **Bouton d'abandon** : Se rendre (icône drapeau blanc)
+- Historique des actions (local storage)
+- **Gestion de fin de partie** :
+  - Modal de victoire/défaite
+  - Choix : Retour au lobby ou Menu
+  - Si retour au lobby : Réinitialisation de la partie
+  - Si menu : Suppression du lobby (si tous choisissent menu)
 
 ## Statistiques et progression
 
@@ -175,11 +205,37 @@ BattleWeb est un jeu de stratégie naval multi-joueurs où les joueurs doivent d
 - Précision des tirs
 - Navires coulés
 - Temps de jeu
+- Sauvegarde automatique dans l'historique local
 
 ### Globales
-- Ratio victoires/défaites
-- Classement
-- Achievements
+- Ratio victoires/défaites (à implémenter)
+- Classement (à implémenter)
+- Achievements (à implémenter)
+
+## Profil utilisateur
+
+### Informations
+- **Nom d'utilisateur** : Par défaut, début de l'email
+- **Email** : Adresse de connexion
+- **Date de création** : Timestamp de création du compte
+- **Date de mise à jour** : Dernière modification du profil
+
+### Fonctionnalités
+- **Modification du nom d'utilisateur** : Accessible depuis la page profil
+- **Réinitialisation du mot de passe** : Via lien "Mot de passe oublié" sur la page de connexion
+
+## Gestion des parties terminées
+
+### Sauvegarde automatique
+- Les parties terminées sont automatiquement sauvegardées dans l'historique local
+- Limite de 50 parties dans l'historique
+- Format : `GameHistoryEntry` avec code, joueurs, gagnant, date
+
+### Nettoyage automatique
+- **Parties terminées** : Supprimées de Firebase après 1 heure
+- **Lobbies vides** : Supprimés après 30 secondes d'inactivité
+- **Parties abandonnées** : Détectées automatiquement et marquées comme terminées
+- **Parties orphelines** : Détectées et nettoyées lors du chargement du dashboard
 
 ## Aspects sociaux
 
