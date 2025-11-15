@@ -131,14 +131,15 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
 
       setGame(updatedGame);
 
-      // Si la partie commence, appeler le callback
-      if (updatedGame.phase !== 'lobby') {
-        onGameStart(updatedGame);
+      // Si la partie commence (phase placement ou playing), rediriger vers la page de placement
+      if (updatedGame.phase === 'placement' || updatedGame.phase === 'playing') {
+        // Utiliser router.push directement au lieu de onGameStart pour éviter les problèmes de timing
+        router.push(`/placement?gameId=${updatedGame.id}`);
       }
     });
 
     return unsubscribe;
-  }, [game?.id, onGameStart, router]);
+  }, [game?.id, router]);
 
   // Écouter le chat
   useEffect(() => {
@@ -177,9 +178,9 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
     setLoading(true);
     try {
       await startGame(game.id, user.uid);
+      // La redirection sera gérée par le subscribeToGame qui détectera le changement de phase
     } catch (error: any) {
       setError(error.message);
-    } finally {
       setLoading(false);
     }
   };
