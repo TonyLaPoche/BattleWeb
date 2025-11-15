@@ -1,10 +1,9 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Grid } from '@/components/game/Grid';
-import { ShipPlacer } from '@/components/game/ShipPlacer';
 import { useShipPlacement } from '@/hooks/useGameLogic';
 import { getGame, updateGame, subscribeToGame } from '@/services/gameService';
 import { Game, Player } from '@/types/game';
@@ -18,14 +17,12 @@ function PlacementPageContent() {
   const [game, setGame] = useState<Game | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const shipPlacerRef = useRef<{ handleDragOver: (x: number, y: number) => void; handleDrop: (x: number, y: number) => void } | null>(null);
+  const [autoPlaced, setAutoPlaced] = useState(false);
 
   const {
     ships,
     gridCells,
     allShipsPlaced,
-    placeShip,
-    removeShip,
     autoPlaceShips,
     resetPlacement,
   } = useShipPlacement();
@@ -82,33 +79,24 @@ function PlacementPageContent() {
     };
   }, [gameId, user, router]);
 
-  // Gestionnaire de survol (pour preview du placement)
-  const handleCellHover = (x: number, y: number) => {
-    // TODO: Implémenter la preview du placement
-  };
-
-  // Gestionnaire de drag over sur la grille
-  const handleGridDragOver = (x: number, y: number) => {
-    if (shipPlacerRef.current) {
-      shipPlacerRef.current.handleDragOver(x, y);
+  // Placement automatique au chargement si pas encore fait
+  useEffect(() => {
+    if (!autoPlaced && !loading && game) {
+      autoPlaceShips();
+      setAutoPlaced(true);
     }
+  }, [autoPlaced, loading, game, autoPlaceShips]);
+
+  // Gestionnaire de placement automatique
+  const handleAutoPlace = () => {
+    autoPlaceShips();
+    setAutoPlaced(true);
   };
 
-  // Gestionnaire de drop sur la grille
-  const handleGridDrop = (x: number, y: number) => {
-    if (shipPlacerRef.current) {
-      shipPlacerRef.current.handleDrop(x, y);
-    }
-  };
-
-  // Gestionnaire de placement de navire (drag & drop)
-  const handleShipPlace = (shipId: string, positions: any[]) => {
-    placeShip(shipId, positions);
-  };
-
-  // Gestionnaire de suppression de navire
-  const handleShipRemove = (shipId: string) => {
-    removeShip(shipId);
+  // Gestionnaire de réinitialisation
+  const handleReset = () => {
+    resetPlacement();
+    setAutoPlaced(false);
   };
 
   // Valider le placement et sauvegarder dans Firebase
@@ -183,77 +171,76 @@ function PlacementPageContent() {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Placement de la flotte</h1>
           <p className="text-gray-600 mt-2">
-            Placez vos navires sur la grille avant de commencer la partie
+            Vos navires seront placés automatiquement sur la grille
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
-          {/* Grille de jeu */}
-          <div className="lg:col-span-2 flex justify-center overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-            <div className="inline-block">
-              <Grid
-                cells={gridCells}
-                onCellHover={handleCellHover}
-                onDragOver={handleGridDragOver}
-                onDrop={handleGridDrop}
-                showCoordinates={true}
-                className="shadow-xl"
-              />
-            </div>
-          </div>
-
-          {/* Panneau de placement */}
-          <div className="lg:col-span-1 order-first lg:order-last">
-            <ShipPlacer
-              ref={shipPlacerRef}
-              ships={ships}
-              onShipPlace={handleShipPlace}
-              onShipRemove={handleShipRemove}
-              gridCells={gridCells}
-              onGridDragOver={handleGridDragOver}
-              onGridDrop={handleGridDrop}
-            />
-
-            {/* Boutons d'action */}
-            <div className="mt-6 space-y-3">
-              {/* Placement automatique */}
-              <button
-                onClick={autoPlaceShips}
-                className="w-full py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors"
-              >
-                Placement automatique
-              </button>
-
-              {/* Réinitialiser */}
-              <button
-                onClick={resetPlacement}
-                className="w-full py-2 px-4 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-colors"
-              >
-                Réinitialiser
-              </button>
-
-              {/* Bouton de validation */}
-              <button
-                onClick={handleValidatePlacement}
-                disabled={!allShipsPlaced || saving}
-                className={`
-                  w-full py-3 px-4 rounded-lg font-semibold text-white transition-colors
-                  ${allShipsPlaced && !saving
-                    ? 'bg-green-500 hover:bg-green-600'
-                    : 'bg-gray-300 cursor-not-allowed'
-                  }
-                `}
-              >
-                {saving ? 'Sauvegarde...' : allShipsPlaced ? 'Valider le placement' : 'Placez tous vos navires'}
-              </button>
+        <div className="max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+            {/* Grille de jeu */}
+            <div className="flex justify-center overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+              <div className="inline-block">
+                <Grid
+                  cells={gridCells}
+                  showCoordinates={true}
+                  className="shadow-xl"
+                />
+              </div>
             </div>
 
-            {/* Statistiques */}
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-              <h4 className="font-semibold text-blue-900 mb-2">Votre flotte</h4>
-              <div className="space-y-1 text-sm text-blue-800">
-                <p>• Navires placés: {ships.filter(s => s.positions.length > 0).length}/{ships.length}</p>
-                <p>• Cases occupées: {ships.reduce((total, ship) => total + ship.positions.length, 0)}</p>
+            {/* Panneau de contrôle */}
+            <div className="flex flex-col justify-center space-y-4">
+              {/* Statistiques */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-lg border-2 border-blue-200 p-6">
+                <h4 className="text-xl font-bold text-blue-900 mb-4">📊 Votre flotte</h4>
+                <div className="space-y-2 text-base text-blue-800">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold">Navires placés:</span>
+                    <span className="font-bold text-blue-600">
+                      {ships.filter(s => s.positions.length > 0).length}/{ships.length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold">Cases occupées:</span>
+                    <span className="font-bold text-blue-600">
+                      {ships.reduce((total, ship) => total + ship.positions.length, 0)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Boutons d'action */}
+              <div className="space-y-3">
+                {/* Placement automatique */}
+                <button
+                  onClick={handleAutoPlace}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-semibold text-lg shadow-lg transition-all hover:scale-105 active:scale-95"
+                >
+                  🔄 Nouveau placement automatique
+                </button>
+
+                {/* Réinitialiser */}
+                <button
+                  onClick={handleReset}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white rounded-xl font-semibold text-lg shadow-lg transition-all hover:scale-105 active:scale-95"
+                >
+                  🔃 Réinitialiser
+                </button>
+
+                {/* Bouton de validation */}
+                <button
+                  onClick={handleValidatePlacement}
+                  disabled={!allShipsPlaced || saving}
+                  className={`
+                    w-full py-4 px-4 rounded-xl font-bold text-lg shadow-lg transition-all
+                    ${allShipsPlaced && !saving
+                      ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white hover:scale-105 active:scale-95'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    }
+                  `}
+                >
+                  {saving ? '⏳ Sauvegarde...' : allShipsPlaced ? '✅ Valider le placement' : '⏸️ Placez tous vos navires'}
+                </button>
               </div>
             </div>
           </div>
