@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useGameStore } from '@/stores/gameStore';
 import { Game, LobbyMessage } from '@/types/game';
@@ -12,7 +13,8 @@ import {
   subscribeToChat,
   sendChatMessage,
   updateGameSettings,
-  startGame
+  startGame,
+  leaveGame
 } from '@/services/gameService';
 import { getUserProfile, createOrUpdateUserProfile } from '@/services/userService';
 import { LobbyChat } from './LobbyChat';
@@ -29,6 +31,7 @@ interface LobbyProps {
 export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGameId }: LobbyProps) => {
   const { user } = useAuth();
   const { currentGame, setCurrentGame } = useGameStore();
+  const router = useRouter();
 
   const [game, setGame] = useState<Game | null>(initialGame || currentGame);
   const [chatMessages, setChatMessages] = useState<LobbyMessage[]>([]);
@@ -201,6 +204,26 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
     }
   };
 
+  // Quitter le lobby
+  const handleLeaveLobby = async () => {
+    if (!game?.id || !user) return;
+
+    // Demander confirmation
+    if (!confirm('Êtes-vous sûr de vouloir quitter le lobby ?')) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await leaveGame(game.id, user.uid);
+      // Rediriger vers le dashboard
+      router.push('/dashboard');
+    } catch (error: any) {
+      setError(error.message || 'Erreur lors de la sortie du lobby');
+      setLoading(false);
+    }
+  };
+
   // Si pas de partie, afficher l'écran d'accueil du lobby
   if (!game) {
     return (
@@ -240,7 +263,17 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
           {/* Informations de la partie */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold mb-4">Partie {game.code}</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">Partie {game.code}</h2>
+                <button
+                  onClick={handleLeaveLobby}
+                  disabled={loading}
+                  className="px-3 py-1.5 bg-red-500 hover:bg-red-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded transition-colors"
+                  title="Quitter le lobby"
+                >
+                  🚪 Quitter
+                </button>
+              </div>
 
               <LobbyPlayers
                 players={game.players}

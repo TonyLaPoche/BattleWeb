@@ -703,31 +703,27 @@ export async function leaveGame(gameId: string, playerId: string) {
 
     const updatedPlayers = game.players.filter(p => p.id !== playerId);
 
-    // Si l'admin quitte et qu'il n'y a pas d'autres joueurs, supprimer le lobby
-    if (game.adminId === playerId && updatedPlayers.length === 0) {
+    // Si plus de joueurs, supprimer le lobby
+    if (updatedPlayers.length === 0) {
       await deleteDoc(doc(db, 'games', gameId));
       return;
     }
 
-    if (updatedPlayers.length === 0) {
-      // Supprimer la partie si plus de joueurs
-      await deleteDoc(doc(db, 'games', gameId));
-    } else {
-      // Mettre à jour la partie
-      const updates: any = {
-        players: updatedPlayers,
-        lastActivity: Date.now(),
-      };
+    // Mettre à jour la partie
+    const updates: any = {
+      players: updatedPlayers,
+      lastActivity: Date.now(),
+    };
 
-      // Si l'admin quitte, donner l'admin au premier joueur restant
-      if (game.adminId === playerId && updatedPlayers.length > 0) {
-        updates.adminId = updatedPlayers[0].id;
-      }
-
-      await updateDoc(doc(db, 'games', gameId), updates);
+    // Si l'admin quitte, donner l'admin au premier joueur restant
+    if (game.adminId === playerId) {
+      updates.adminId = updatedPlayers[0].id;
     }
+
+    await updateDoc(doc(db, 'games', gameId), updates);
   } catch (error) {
     console.error('Erreur lors de la sortie de la partie:', error);
+    throw error;
   }
 }
 
