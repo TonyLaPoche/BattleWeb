@@ -1,7 +1,7 @@
 import { db, realtimeDb } from '@/lib/firebase';
 import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot, deleteDoc, deleteField } from 'firebase/firestore';
 import { ref, set, get, onValue, off, push, update } from 'firebase/database';
-import { Game, Player, GameSettings, LobbyMessage, GameMove, CellState, GameBoard, Bomb } from '@/types/game';
+import { Game, Player, GameSettings, LobbyMessage, GameMove, CellState, GameBoard, Bomb, Position } from '@/types/game';
 
 // Générer un code d'invitation unique
 function generateGameCode(): string {
