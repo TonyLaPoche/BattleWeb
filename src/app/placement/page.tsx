@@ -131,13 +131,19 @@ function PlacementPageContent() {
       );
 
       // Mettre à jour la partie dans Firebase
-      await updateGame(game.id, {
+      const gameUpdates: any = {
         players: updatedPlayers,
         phase: allPlayersReady ? 'playing' : 'placement',
         status: allPlayersReady ? 'active' : 'active',
-        turnStartTime: allPlayersReady ? Date.now() : undefined, // Démarrer le timer si la partie commence
         lastActivity: Date.now(),
-      });
+      };
+      
+      // Démarrer le timer seulement si la partie commence
+      if (allPlayersReady) {
+        gameUpdates.turnStartTime = Date.now();
+      }
+      
+      await updateGame(game.id, gameUpdates);
 
       // Si tous les joueurs sont prêts, passer au jeu
       if (allPlayersReady) {
