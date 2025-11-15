@@ -112,11 +112,11 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
 
   // Rejoindre automatiquement si un code est fourni
   useEffect(() => {
-    if (initialCode && !game && user && !loading) {
+    if (initialCode && !game && user && playerName && !loading) {
       handleJoinGame(initialCode);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCode, game, user]);
+  }, [initialCode, game, user, playerName]);
 
   // Écouter les changements de la partie
   useEffect(() => {
@@ -206,6 +206,30 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
 
   // Si pas de partie, afficher un message avec un bouton retour
   if (!game) {
+    // Si on est en train de charger ou de rejoindre une partie, afficher un message de chargement
+    if (loading || (initialCode && playerName)) {
+      return (
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
+            <h1 className="text-2xl font-bold text-center mb-4">BattleWeb Lobby</h1>
+            
+            <div className="text-center mb-6">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+              <p className="text-gray-600">
+                {initialCode ? 'Rejoindre la partie...' : 'Chargement...'}
+              </p>
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                {error}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
