@@ -1,0 +1,666 @@
+'use client';
+
+import { useRouter, useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { getGame, subscribeToGame, updateGame, placeBomb, defuseBomb, activateBombs, setPlayerChoice, handleGameEnd } from '@/services/gameService';
+import { Game, Player, Position, CellState, Bomb } from '@/types/game';
+import { Grid } from '@/components/game/Grid';
+
+export default function GamePage() {
+  const router = useRouter();
+  const params = useParams();
+  const gameId = params.gameId as string;
+  const { user } = useAuth();
+  
+  const [game, setGame] = useState<Game | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actionMode, setActionMode] = useState<'shot' | 'bomb'>('shot'); // Mode d'action : tir ou bombe
+  const [playerChoice, setPlayerChoiceState] = useState<'lobby' | 'menu' | null>(null); // Choix du joueur actuel
+
+  // Charger la partie et écouter les changements
+  useEffect(() => {
+    if (!gameId || !user) {
+      router.push('/dashboard');
+      return;
+    }
+
+    const loadGame = async () => {
+      try {
+        const loadedGame = await getGame(gameId);
+        if (loadedGame) {
+          setGame(loadedGame);
+          // Vérifier que l'utilisateur est dans la partie
+          const player = loadedGame.players.find(p => p.id === user.uid);
+          if (!player) {
+            router.push('/dashboard');
+            return;
+          }
+          
+          // Si la phase n'est pas 'playing', rediriger
+          if (loadedGame.phase !== 'playing') {
+            if (loadedGame.phase === 'placement') {
+              router.push(`/placement?gameId=${gameId}`);
+            } else {
+              router.push('/dashboard');
+            }
+            return;
+          }
+        } else {
+          router.push('/dashboard');
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement de la partie:', error);
+        router.push('/dashboard');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadGame();
+    
+    // Écouter les changements de la partie en temps réel
+    const unsubscribe = subscribeToGame(gameId, async (updatedGame) => {
+      setGame(updatedGame);
+      
+      // Activer les bombes qui doivent s'activer
+      if (updatedGame.phase === 'playing') {
+        await activateBombs(gameId);
+      }
+      
+      // Si la partie est terminée, gérer les choix
+      if (updatedGame.phase === 'finished') {
+        // Vérifier si le joueur a déjà fait un choix
+        const choices = updatedGame.playerChoices || {};
+        if (user && choices[user.uid]) {
+          setPlayerChoiceState(choices[user.uid]);
+        }
+        
+        // Gérer la fin de partie (seulement si tous les joueurs ont choisi)
+        const allPlayersChose = updatedGame.players.every(p => choices[p.id] !== undefined);
+        if (allPlayersChose) {
+          await handleGameEnd(gameId);
+          
+          // Vérifier le résultat après gestion
+          setTimeout(async () => {
+            const updatedGameAfter = await getGame(gameId);
+            if (!updatedGameAfter) {
+              // Lobby supprimé
+              router.push('/dashboard');
+            } else if (updatedGameAfter.phase === 'lobby') {
+              // Retour au lobby
+              router.push(`/lobby?gameId=${gameId}`);
+            }
+          }, 1000);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [gameId, user, router]);
+
+  // Obtenir le joueur actuel
+  const currentPlayer = game?.players.find(p => p.id === user?.uid);
+  const isCurrentTurn = game && game.players[game.currentPlayerIndex]?.id === user?.uid;
+  const currentPlayerTurn = game?.players[game.currentPlayerIndex];
+
+  // Gérer un tir
+  const handleCellClick = async (opponentId: string, x: number, y: number) => {
+    if (!game || !user || !isCurrentTurn || !currentPlayer) return;
+    if (game.phase !== 'playing') return;
+
+    // Trouver le joueur cible
+    const targetPlayer = game.players.find(p => p.id === opponentId);
+    if (!targetPlayer || targetPlayer.id === user.uid) return;
+
+    const cellState = targetPlayer.board.cells[y]?.[x];
+    if (cellState === 'hit' || cellState === 'miss' || cellState === 'revealed') {
+      return; // Case déjà tirée
+    }
+
+    try {
+      // Déterminer le résultat du tir
+      const shipAtPosition = targetPlayer.board.ships.find(ship =>
+        ship.positions.some(pos => pos.x === x && pos.y === y)
+      );
+
+      const newCellState: CellState = shipAtPosition ? 'hit' : 'miss';
+      
+      // Mettre à jour la grille de l'adversaire
+      const updatedCells = targetPlayer.board.cells.map((row, rowIndex) =>
+        rowIndex === y
+          ? row.map((cell, colIndex) => (colIndex === x ? newCellState : cell))
+          : row
+      );
+
+      // Si un navire est touché, mettre à jour ses hits
+      let updatedShips = targetPlayer.board.ships;
+      if (shipAtPosition) {
+        updatedShips = targetPlayer.board.ships.map(ship => {
+          if (ship.id === shipAtPosition.id) {
+            const newHits = ship.hits + 1;
+            return {
+              ...ship,
+              hits: newHits,
+              sunk: newHits >= ship.size,
+            };
+          }
+          return ship;
+        });
+      }
+
+      // Mettre à jour le joueur cible
+      const updatedTargetPlayer: Player = {
+        ...targetPlayer,
+        board: {
+          cells: updatedCells,
+          ships: updatedShips,
+        },
+        isAlive: updatedShips.some(ship => !ship.sunk),
+      };
+
+      // Vérifier si le joueur cible est mort
+      const targetIsDead = !updatedTargetPlayer.isAlive;
+
+      // Mettre à jour la liste des joueurs
+      const updatedPlayers = game.players.map(p =>
+        p.id === updatedTargetPlayer.id ? updatedTargetPlayer : p
+      );
+
+      // Vérifier s'il reste un seul joueur vivant
+      const alivePlayers = updatedPlayers.filter(p => p.isAlive);
+
+      // Déterminer le prochain joueur
+      let nextPlayerIndex = game.currentPlayerIndex;
+      if (!targetIsDead && alivePlayers.length > 1) {
+        // Passer au joueur suivant
+        nextPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+        // S'assurer que le prochain joueur est vivant
+        while (!updatedPlayers[nextPlayerIndex].isAlive && nextPlayerIndex !== game.currentPlayerIndex) {
+          nextPlayerIndex = (nextPlayerIndex + 1) % game.players.length;
+        }
+      }
+
+      const winnerId = alivePlayers.length === 1 ? alivePlayers[0].id : undefined;
+
+      // Préparer les mises à jour
+      const gameUpdates: any = {
+        players: updatedPlayers,
+        currentPlayerIndex: winnerId ? game.currentPlayerIndex : nextPlayerIndex,
+        currentTurn: winnerId ? game.currentTurn : game.currentTurn + 1,
+        phase: winnerId ? 'finished' : 'playing',
+        status: winnerId ? 'finished' : 'active',
+      };
+
+      // Ajouter winnerId seulement s'il y a un gagnant
+      if (winnerId) {
+        gameUpdates.winnerId = winnerId;
+      }
+
+      // Mettre à jour la partie
+      await updateGame(game.id, gameUpdates);
+      
+      // Activer les bombes après le changement de tour
+      if (!winnerId) {
+        await activateBombs(game.id);
+      }
+    } catch (error: any) {
+      console.error('Erreur lors du tir:', error);
+      setError('Erreur lors du tir');
+    }
+  };
+
+  // Gérer le placement d'une bombe
+  const handleBombPlace = async (opponentId: string, x: number, y: number) => {
+    if (!game || !user || !isCurrentTurn || !currentPlayer) return;
+    if (game.phase !== 'playing') return;
+    if (currentPlayer.bombsRemaining <= 0) {
+      setError('Vous n\'avez plus de bombes disponibles');
+      return;
+    }
+
+    try {
+      await placeBomb(game.id, user.uid, opponentId, { x, y });
+      
+      // Passer au joueur suivant après placement (le tour actuel continue)
+      const nextPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+      await updateGame(game.id, {
+        currentPlayerIndex: nextPlayerIndex,
+        // Ne pas incrémenter currentTurn ici, seulement après un tir
+      });
+      
+      // Activer les bombes
+      await activateBombs(game.id);
+      
+      // Revenir en mode tir
+      setActionMode('shot');
+    } catch (error: any) {
+      console.error('Erreur lors du placement de la bombe:', error);
+      setError(error.message || 'Erreur lors du placement de la bombe');
+    }
+  };
+
+  // Gérer le désamorçage d'une bombe
+  const handleDefuseBomb = async (bombId: string) => {
+    if (!game || !user || !isCurrentTurn || !currentPlayer) return;
+    if (game.phase !== 'playing') return;
+
+    try {
+      await defuseBomb(game.id, user.uid, bombId);
+      
+      // Passer au joueur suivant après désamorçage (perd son tour de tir)
+      const nextPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+      await updateGame(game.id, {
+        currentPlayerIndex: nextPlayerIndex,
+        currentTurn: (game.currentTurn || 0) + 1,
+      });
+      
+      // Activer les bombes
+      await activateBombs(game.id);
+    } catch (error: any) {
+      console.error('Erreur lors du désamorçage:', error);
+      setError(error.message || 'Erreur lors du désamorçage');
+    }
+  };
+
+  // Gérer l'abandon de la partie
+  const handleSurrender = async () => {
+    if (!game || !user || !currentPlayer) return;
+    if (game.phase !== 'playing') return;
+
+    // Demander confirmation
+    if (!confirm('Êtes-vous sûr de vouloir abandonner la partie ?')) {
+      return;
+    }
+
+    try {
+      // Marquer le joueur comme mort
+      const updatedPlayers = game.players.map(p => {
+        if (p.id === user.uid) {
+          return {
+            ...p,
+            isAlive: false,
+          };
+        }
+        return p;
+      });
+
+      // Vérifier s'il reste un seul joueur vivant
+      const alivePlayers = updatedPlayers.filter(p => p.isAlive);
+      const winnerId = alivePlayers.length === 1 ? alivePlayers[0].id : undefined;
+
+      // Mettre à jour la partie
+      const gameUpdates: any = {
+        players: updatedPlayers,
+        phase: winnerId ? 'finished' : 'playing',
+        status: winnerId ? 'finished' : 'active',
+      };
+
+      if (winnerId) {
+        gameUpdates.winnerId = winnerId;
+      }
+
+      await updateGame(game.id, gameUpdates);
+    } catch (error: any) {
+      console.error('Erreur lors de l\'abandon:', error);
+      setError('Erreur lors de l\'abandon');
+    }
+  };
+
+  // Gérer le choix après la fin de partie
+  const handleEndGameChoice = async (choice: 'lobby' | 'menu') => {
+    if (!game || !user) return;
+
+    try {
+      setPlayerChoiceState(choice);
+      await setPlayerChoice(game.id, user.uid, choice);
+      
+      // Attendre un peu puis vérifier les choix
+      setTimeout(async () => {
+        await handleGameEnd(game.id);
+        const updatedGame = await getGame(game.id);
+        
+        if (!updatedGame) {
+          // Lobby supprimé, retourner au menu
+          router.push('/dashboard');
+        } else if (updatedGame.phase === 'lobby') {
+          // Retour au lobby
+          router.push(`/lobby?gameId=${game.id}`);
+        }
+      }, 500);
+    } catch (error: any) {
+      console.error('Erreur lors du choix:', error);
+      setError(error.message || 'Erreur lors du choix');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl">Chargement de la partie...</div>
+      </div>
+    );
+  }
+
+  if (!game || !currentPlayer) {
+    return null; // Redirection en cours
+  }
+
+  // Obtenir le gagnant si la partie est terminée
+  const winner = game.winnerId ? game.players.find(p => p.id === game.winnerId) : null;
+  const isWinner = winner?.id === user?.uid;
+  const choices = game.playerChoices || {};
+  const hasChosen = user ? choices[user.uid] !== undefined : false;
+  const otherPlayerChoice = game.players
+    .filter(p => p.id !== user?.uid)
+    .map(p => choices[p.id])
+    .find(c => c !== undefined);
+
+  // Obtenir les adversaires (joueurs autres que le joueur actuel)
+  const opponents = game.players.filter(p => p.id !== user?.uid);
+
+  // Créer une grille masquée pour l'adversaire (ne montre pas les navires, seulement les tirs)
+  const getOpponentGrid = (opponent: Player): CellState[][] => {
+    return opponent.board.cells.map((row, y) =>
+      row.map((cell, x) => {
+        // Si c'est un navire non touché, on le masque (affiche comme 'empty')
+        if (cell === 'ship') {
+          return 'empty';
+        }
+        // Si c'est revealed_ship ou revealed_empty, on les garde tels quels
+        // Sinon, on affiche l'état réel (hit, miss, revealed)
+        return cell;
+      })
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 py-8">
+      {/* Modal de fin de partie */}
+      {game.phase === 'finished' && winner && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-white via-yellow-50 to-orange-50 rounded-2xl shadow-2xl p-8 max-w-md w-full border-4 border-yellow-400 animate-scale-in">
+            <div className="text-center">
+              <div className="text-7xl mb-4 animate-bounce">
+                {isWinner ? '🏆' : '💀'}
+              </div>
+              <h2 className="text-4xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                {isWinner ? 'Victoire !' : 'Défaite'}
+              </h2>
+              <p className="text-xl text-gray-700 mb-2">
+                Le joueur
+              </p>
+              <p className="text-2xl font-bold mb-6" style={{ color: winner.color }}>
+                {winner.name}
+              </p>
+              <p className="text-xl text-gray-700 mb-8">
+                a gagné !
+              </p>
+
+              {!hasChosen ? (
+                <div className="space-y-4">
+                  <button
+                    onClick={() => handleEndGameChoice('lobby')}
+                    className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 text-lg"
+                  >
+                    🏠 Retour au Lobby
+                  </button>
+                  <button
+                    onClick={() => handleEndGameChoice('menu')}
+                    className="w-full bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 text-lg"
+                  >
+                    🏡 Retour au Menu
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+                    <p className="text-gray-700 font-semibold">
+                      Vous avez choisi : <span className="text-blue-600 font-bold">{playerChoice === 'lobby' ? '🏠 Lobby' : '🏡 Menu'}</span>
+                    </p>
+                  </div>
+                  {otherPlayerChoice && (
+                    <div className="p-4 bg-green-50 rounded-lg border-2 border-green-200">
+                      <p className="text-gray-700 font-semibold">
+                        L'autre joueur a choisi : <span className="text-green-600 font-bold">{otherPlayerChoice === 'lobby' ? '🏠 Lobby' : '🏡 Menu'}</span>
+                      </p>
+                    </div>
+                  )}
+                  {!otherPlayerChoice && (
+                    <div className="p-4 bg-yellow-50 rounded-lg border-2 border-yellow-200">
+                      <p className="text-gray-700 font-semibold flex items-center justify-center">
+                        <span className="animate-spin mr-2">⏳</span>
+                        En attente du choix de l'autre joueur...
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
+            ⚔️ Partie en cours
+          </h1>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className={`px-5 py-3 rounded-xl font-bold shadow-lg transition-all ${
+              isCurrentTurn 
+                ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse' 
+                : 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700'
+            }`}>
+              {isCurrentTurn ? '🎯 C\'est votre tour !' : `⏳ Tour de ${currentPlayerTurn?.name || '...'}`}
+            </div>
+            <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 text-gray-700 font-semibold">
+              👥 Joueurs vivants: <span className="text-blue-600">{game.players.filter(p => p.isAlive).length}/{game.players.length}</span>
+            </div>
+            
+            {/* Bouton Abandonner */}
+            {game.phase === 'playing' && currentPlayer && currentPlayer.isAlive && (
+              <button
+                onClick={handleSurrender}
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+                title="Abandonner la partie"
+              >
+                🏳️ Abandonner
+              </button>
+            )}
+            
+            {/* Boutons Tir/Bombe */}
+            {isCurrentTurn && game.settings.enableBombs && game.settings.bombsPerPlayer > 0 && (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setActionMode('shot')}
+                  className={`px-5 py-3 rounded-xl font-bold transition-all shadow-lg ${
+                    actionMode === 'shot'
+                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white scale-105 ring-4 ring-blue-300'
+                      : 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700 hover:from-gray-300 hover:to-gray-400 hover:scale-105'
+                  }`}
+                >
+                  🎯 Tir
+                </button>
+                <button
+                  onClick={() => setActionMode('bomb')}
+                  disabled={currentPlayer.bombsRemaining <= 0}
+                  className={`px-5 py-3 rounded-xl font-bold transition-all shadow-lg ${
+                    actionMode === 'bomb'
+                      ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white scale-105 ring-4 ring-orange-300'
+                      : currentPlayer.bombsRemaining > 0
+                      ? 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700 hover:from-gray-300 hover:to-gray-400 hover:scale-105'
+                      : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  💣 Bombe <span className="ml-1 bg-white/30 px-2 py-0.5 rounded-full">({currentPlayer.bombsRemaining})</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Légende des couleurs */}
+        <div className="mb-6 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg border-2 border-gray-200 p-5">
+          <h3 className="text-xl font-bold text-gray-900 mb-4">🎨 Légende</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-red-600 border-2 border-red-700 rounded shadow-inner"></div>
+              <span className="text-sm text-gray-700 font-medium">Touché</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-sky-300 border-2 border-sky-400 rounded"></div>
+              <span className="text-sm text-gray-700 font-medium">Raté</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-blue-100 border-2 border-blue-200 rounded"></div>
+              <span className="text-sm text-gray-700 font-medium">Eau</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-amber-400 border-2 border-amber-500 rounded shadow-md"></div>
+              <span className="text-sm text-gray-700 font-medium">Révélé (navire)</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-cyan-200 border-2 border-cyan-300 rounded"></div>
+              <span className="text-sm text-gray-700 font-medium">Révélé (vide)</span>
+            </div>
+            {game.settings.enableBombs && game.settings.bombsPerPlayer > 0 && (
+              <div className="flex items-center space-x-2">
+                <div className="w-6 h-6 bg-orange-500 border-2 border-orange-600 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg">
+                  💣
+                </div>
+                <span className="text-sm text-gray-700 font-medium">Bombe active</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-4 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-300 text-red-700 rounded-xl shadow-lg">
+            <div className="flex items-center">
+              <span className="text-xl mr-2">⚠️</span>
+              <span className="font-semibold">{error}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Grilles des adversaires */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {opponents.map((opponent) => (
+            <div key={opponent.id} className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-xl border-2 border-gray-200 p-6">
+              <h2 className="text-2xl font-bold mb-4 flex items-center" style={{ color: opponent.color }}>
+                <span className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: opponent.color }}></span>
+                {opponent.name}
+                {!opponent.isAlive && <span className="ml-2 text-red-500 text-xl">💀</span>}
+              </h2>
+              
+              <div className="flex justify-center relative">
+                <Grid
+                  cells={getOpponentGrid(opponent)}
+                  onCellClick={
+                    isCurrentTurn && opponent.isAlive
+                      ? actionMode === 'shot'
+                        ? (x, y) => handleCellClick(opponent.id, x, y)
+                        : (x, y) => handleBombPlace(opponent.id, x, y)
+                      : undefined
+                  }
+                  interactive={!!(isCurrentTurn && opponent.isAlive)}
+                  showCoordinates={true}
+                  className="shadow-md"
+                />
+                
+                {/* Afficher les bombes actives sur cette grille */}
+                {game.players
+                  .flatMap(p => p.bombsPlaced.filter(b => b.targetPlayerId === opponent.id && !b.detonated && !b.defused))
+                  .map(bomb => {
+                    const turnsRemaining = Math.max(0, bomb.activatesAtTurn - (game.currentTurn || 0));
+                    // Calcul du positionnement : padding (16px) + coordonnées (36px) + position * 36px + centre de la case (16px)
+                    const left = 16 + 36 + bomb.position.x * 36 + 16;
+                    const top = 16 + 36 + bomb.position.y * 36 + 16;
+                    return (
+                      <div
+                        key={bomb.id}
+                        className="absolute bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full w-10 h-10 flex items-center justify-center border-4 border-white shadow-xl z-10 animate-pulse"
+                        style={{
+                          left: `${left}px`,
+                          top: `${top}px`,
+                          transform: 'translate(-50%, -50%)',
+                        }}
+                        title={`💣 Bombe - Activation dans ${turnsRemaining} tour${turnsRemaining > 1 ? 's' : ''}`}
+                      >
+                        <span className="text-lg">💣</span>
+                        <span className="absolute -bottom-1 -right-1 bg-red-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center border-2 border-white">
+                          {turnsRemaining}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {/* Statistiques */}
+              <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                <div className="text-sm font-semibold text-gray-700">
+                  ⚓ Navires coulés: <span className="text-blue-600">{opponent.board.ships.filter(s => s.sunk).length}/{opponent.board.ships.length}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Votre grille (pour référence) */}
+        <div className="mt-8 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-xl border-2 border-gray-200 p-6">
+          <h2 className="text-2xl font-bold mb-4 text-gray-800">⚓ Votre grille</h2>
+          <div className="flex justify-center relative">
+            <Grid
+              cells={currentPlayer.board.cells}
+              showCoordinates={true}
+              className="shadow-md"
+            />
+            
+            {/* Afficher les bombes actives sur votre grille avec bouton de désamorçage */}
+            {game.players
+              .flatMap(p => p.bombsPlaced.filter(b => b.targetPlayerId === user?.uid && !b.detonated && !b.defused))
+              .map(bomb => {
+                const turnsRemaining = Math.max(0, bomb.activatesAtTurn - (game.currentTurn || 0));
+                const bombOwner = game.players.find(p => p.id === bomb.ownerId);
+                // Calcul du positionnement : padding (16px) + coordonnées (36px) + position * 36px + centre de la case (16px)
+                const left = 16 + 36 + bomb.position.x * 36 + 16;
+                const top = 16 + 36 + bomb.position.y * 36 + 16;
+                return (
+                  <div
+                    key={bomb.id}
+                    className="absolute z-10 flex flex-col items-center"
+                    style={{
+                      left: `${left}px`,
+                      top: `${top}px`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                  >
+                    <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full w-10 h-10 flex items-center justify-center border-4 border-white shadow-xl mb-2 animate-pulse">
+                      <span className="text-lg">💣</span>
+                      <span className="absolute -bottom-1 -right-1 bg-red-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center border-2 border-white">
+                        {turnsRemaining}
+                      </span>
+                    </div>
+                    {isCurrentTurn && (
+                      <button
+                        onClick={() => handleDefuseBomb(bomb.id)}
+                        className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap transition-all hover:scale-105 active:scale-95"
+                        title={`Désamorcer la bombe de ${bombOwner?.name || 'l\'adversaire'}`}
+                      >
+                        ✂️ Désamorcer
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
