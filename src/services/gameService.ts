@@ -308,11 +308,11 @@ export async function startGame(gameId: string, adminId: string) {
       bombsRemaining: game.settings.bombsPerPlayer || 0,
     }));
 
-    await updateDoc(doc(db, 'games', gameId), {
+    // Préparer les mises à jour (ne pas inclure turnStartTime pendant le placement)
+    const gameUpdates: any = {
       phase: 'placement',
       status: 'active',
       currentTurn: 0,
-      turnStartTime: undefined, // Pas de timer pendant le placement
       players: updatedPlayers.map(player => ({
         ...player,
         board: {
@@ -321,6 +321,12 @@ export async function startGame(gameId: string, adminId: string) {
         },
       })),
       lastActivity: Date.now(),
+    };
+
+    // Supprimer turnStartTime s'il existe (pas de timer pendant le placement)
+    await updateDoc(doc(db, 'games', gameId), {
+      ...gameUpdates,
+      turnStartTime: deleteField(),
     });
   } catch (error) {
     console.error('Erreur lors du lancement de la partie:', error);

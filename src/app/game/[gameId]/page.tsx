@@ -355,12 +355,14 @@ export default function GamePage() {
         currentTurn: winnerId ? game.currentTurn : game.currentTurn + 1,
         phase: winnerId ? 'finished' : 'playing',
         status: winnerId ? 'finished' : 'active',
-        turnStartTime: winnerId ? undefined : Date.now(), // Réinitialiser le timer pour le nouveau tour
       };
 
       // Ajouter winnerId seulement s'il y a un gagnant
       if (winnerId) {
         gameUpdates.winnerId = winnerId;
+      } else {
+        // Réinitialiser le timer pour le nouveau tour seulement si la partie continue
+        gameUpdates.turnStartTime = Date.now();
       }
 
       // Mettre à jour la partie
