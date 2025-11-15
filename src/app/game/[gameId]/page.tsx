@@ -587,49 +587,54 @@ export default function GamePage() {
               </h2>
               
               <div className="flex justify-center relative overflow-x-auto">
-                <div className="inline-block">
+                <div className="inline-block relative">
                   <Grid
-                  cells={getOpponentGrid(opponent)}
-                  onCellClick={
-                    isCurrentTurn && opponent.isAlive
-                      ? actionMode === 'shot'
-                        ? (x, y) => handleCellClick(opponent.id, x, y)
-                        : (x, y) => handleBombPlace(opponent.id, x, y)
-                      : undefined
-                  }
-                  interactive={!!(isCurrentTurn && opponent.isAlive)}
+                    cells={getOpponentGrid(opponent)}
+                    onCellClick={
+                      isCurrentTurn && opponent.isAlive
+                        ? actionMode === 'shot'
+                          ? (x, y) => handleCellClick(opponent.id, x, y)
+                          : (x, y) => handleBombPlace(opponent.id, x, y)
+                        : undefined
+                    }
+                    interactive={!!(isCurrentTurn && opponent.isAlive)}
                     showCoordinates={true}
                     className="shadow-md"
                   />
+                  
+                  {/* Afficher les bombes actives sur cette grille */}
+                  {game.players
+                    .flatMap(p => p.bombsPlaced.filter(b => b.targetPlayerId === opponent.id && !b.detonated && !b.defused))
+                    .map(bomb => {
+                      const turnsRemaining = Math.max(0, bomb.activatesAtTurn - (game.currentTurn || 0));
+                      // Calcul du positionnement relatif à la grille en pourcentage
+                      const gridSize = 12; // BOARD_SIZE
+                      const cellWidthPercent = 100 / (gridSize + 1); // +1 pour la colonne de coordonnées
+                      const cellHeightPercent = 100 / (gridSize + 1); // +1 pour la ligne de coordonnées
+                      
+                      // Position en pourcentage : coordonnées (1 cellule) + position de la bombe
+                      const leftPercent = cellWidthPercent + (bomb.position.x * cellWidthPercent) + (cellWidthPercent / 2);
+                      const topPercent = cellHeightPercent + (bomb.position.y * cellHeightPercent) + (cellHeightPercent / 2);
+                      
+                      return (
+                        <div
+                          key={bomb.id}
+                          className="absolute bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center border-2 sm:border-4 border-white shadow-xl z-10 animate-pulse pointer-events-none"
+                          style={{
+                            left: `${leftPercent}%`,
+                            top: `${topPercent}%`,
+                            transform: 'translate(-50%, -50%)',
+                          }}
+                          title={`💣 Bombe - Activation dans ${turnsRemaining} tour${turnsRemaining > 1 ? 's' : ''}`}
+                        >
+                          <span className="text-sm sm:text-lg">💣</span>
+                          <span className="absolute -bottom-1 -right-1 bg-red-600 text-white text-[8px] sm:text-[10px] font-bold rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center border-2 border-white">
+                            {turnsRemaining}
+                          </span>
+                        </div>
+                      );
+                    })}
                 </div>
-                
-                {/* Afficher les bombes actives sur cette grille */}
-                {game.players
-                  .flatMap(p => p.bombsPlaced.filter(b => b.targetPlayerId === opponent.id && !b.detonated && !b.defused))
-                  .map(bomb => {
-                    const turnsRemaining = Math.max(0, bomb.activatesAtTurn - (game.currentTurn || 0));
-                    // Calcul du positionnement adaptatif selon la taille d'écran
-                    const coordSize = cellSize;
-                    const left = padding + coordSize + bomb.position.x * cellSize + cellSize / 2;
-                    const top = padding + coordSize + bomb.position.y * cellSize + cellSize / 2;
-                    return (
-                      <div
-                        key={bomb.id}
-                        className="absolute bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full w-10 h-10 flex items-center justify-center border-4 border-white shadow-xl z-10 animate-pulse"
-                        style={{
-                          left: `${left}px`,
-                          top: `${top}px`,
-                          transform: 'translate(-50%, -50%)',
-                        }}
-                        title={`💣 Bombe - Activation dans ${turnsRemaining} tour${turnsRemaining > 1 ? 's' : ''}`}
-                      >
-                        <span className="text-lg">💣</span>
-                        <span className="absolute -bottom-1 -right-1 bg-red-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center border-2 border-white">
-                          {turnsRemaining}
-                        </span>
-                      </div>
-                    );
-                  })}
               </div>
 
               {/* Statistiques */}
@@ -646,52 +651,58 @@ export default function GamePage() {
         <div className="mt-4 sm:mt-8 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-xl border-2 border-gray-200 p-3 sm:p-6">
           <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-800 text-center sm:text-left">⚓ Votre grille</h2>
           <div className="flex justify-center relative overflow-x-auto">
-            <div className="inline-block">
+            <div className="inline-block relative">
               <Grid
                 cells={currentPlayer.board.cells}
                 showCoordinates={true}
                 className="shadow-md"
               />
-            </div>
-            
-            {/* Afficher les bombes actives sur votre grille avec bouton de désamorçage */}
-            {game.players
-              .flatMap(p => p.bombsPlaced.filter(b => b.targetPlayerId === user?.uid && !b.detonated && !b.defused))
-              .map(bomb => {
-                const turnsRemaining = Math.max(0, bomb.activatesAtTurn - (game.currentTurn || 0));
-                const bombOwner = game.players.find(p => p.id === bomb.ownerId);
-                // Calcul du positionnement adaptatif selon la taille d'écran
-                const coordSize = cellSize;
-                const left = padding + coordSize + bomb.position.x * cellSize + cellSize / 2;
-                const top = padding + coordSize + bomb.position.y * cellSize + cellSize / 2;
-                return (
-                  <div
-                    key={bomb.id}
-                    className="absolute z-10 flex flex-col items-center"
-                    style={{
-                      left: `${left}px`,
-                      top: `${top}px`,
-                      transform: 'translate(-50%, -50%)',
-                    }}
-                  >
-                    <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full w-10 h-10 flex items-center justify-center border-4 border-white shadow-xl mb-2 animate-pulse">
-                      <span className="text-lg">💣</span>
-                      <span className="absolute -bottom-1 -right-1 bg-red-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center border-2 border-white">
-                        {turnsRemaining}
-                      </span>
+              
+              {/* Afficher les bombes actives sur votre grille avec bouton de désamorçage */}
+              {game.players
+                .flatMap(p => p.bombsPlaced.filter(b => b.targetPlayerId === user?.uid && !b.detonated && !b.defused))
+                .map(bomb => {
+                  const turnsRemaining = Math.max(0, bomb.activatesAtTurn - (game.currentTurn || 0));
+                  const bombOwner = game.players.find(p => p.id === bomb.ownerId);
+                  // Calcul du positionnement relatif à la grille
+                  // Utiliser un pourcentage pour s'adapter à la taille réelle de la grille
+                  const gridSize = 12; // BOARD_SIZE
+                  const cellWidthPercent = 100 / (gridSize + 1); // +1 pour la colonne de coordonnées
+                  const cellHeightPercent = 100 / (gridSize + 1); // +1 pour la ligne de coordonnées
+                  
+                  // Position en pourcentage : coordonnées (1 cellule) + position de la bombe
+                  const leftPercent = cellWidthPercent + (bomb.position.x * cellWidthPercent) + (cellWidthPercent / 2);
+                  const topPercent = cellHeightPercent + (bomb.position.y * cellHeightPercent) + (cellHeightPercent / 2);
+                  
+                  return (
+                    <div
+                      key={bomb.id}
+                      className="absolute z-10 flex flex-col items-center pointer-events-none"
+                      style={{
+                        left: `${leftPercent}%`,
+                        top: `${topPercent}%`,
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                    >
+                      <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center border-2 sm:border-4 border-white shadow-xl mb-2 animate-pulse pointer-events-auto">
+                        <span className="text-sm sm:text-lg">💣</span>
+                        <span className="absolute -bottom-1 -right-1 bg-red-600 text-white text-[8px] sm:text-[10px] font-bold rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center border-2 border-white">
+                          {turnsRemaining}
+                        </span>
+                      </div>
+                      {isCurrentTurn && (
+                        <button
+                          onClick={() => handleDefuseBomb(bomb.id)}
+                          className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg shadow-lg whitespace-nowrap transition-all hover:scale-105 active:scale-95 pointer-events-auto"
+                          title={`Désamorcer la bombe de ${bombOwner?.name || 'l\'adversaire'}`}
+                        >
+                          ✂️ Désamorcer
+                        </button>
+                      )}
                     </div>
-                    {isCurrentTurn && (
-                      <button
-                        onClick={() => handleDefuseBomb(bomb.id)}
-                        className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg whitespace-nowrap transition-all hover:scale-105 active:scale-95"
-                        title={`Désamorcer la bombe de ${bombOwner?.name || 'l\'adversaire'}`}
-                      >
-                        ✂️ Désamorcer
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })}
+            </div>
           </div>
         </div>
       </div>
