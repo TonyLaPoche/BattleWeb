@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { getGame, subscribeToGame, updateGame, placeBomb, defuseBomb, activateBombs, setPlayerChoice, handleGameEnd } from '@/services/gameService';
 import { Game, Player, Position, CellState, Bomb } from '@/types/game';
 import { Grid } from '@/components/game/Grid';
+import { saveGameToHistory, GameHistoryEntry } from '@/utils/gameHistory';
 
 // Hook pour calculer la taille des cellules selon la taille d'écran
 function useCellSize() {
@@ -99,32 +100,57 @@ export default function GamePage() {
         await activateBombs(gameId);
       }
       
-      // Si la partie est terminée, gérer les choix
-      if (updatedGame.phase === 'finished') {
-        // Vérifier si le joueur a déjà fait un choix
-        const choices = updatedGame.playerChoices || {};
-        if (user && choices[user.uid]) {
-          setPlayerChoiceState(choices[user.uid]);
+        // Si la partie est terminée, sauvegarder dans l'historique
+        if (updatedGame.phase === 'finished' && updatedGame.winnerId) {
+          const currentPlayer = updatedGame.players.find(p => p.id === user?.uid);
+          const winner = updatedGame.players.find(p => p.id === updatedGame.winnerId);
+          
+          if (currentPlayer) {
+            const historyEntry: GameHistoryEntry = {
+              gameId: updatedGame.id,
+              gameCode: updatedGame.code,
+              players: updatedGame.players.map(p => ({
+                id: p.id,
+                name: p.name,
+                color: p.color,
+              })),
+              winnerId: updatedGame.winnerId,
+              winnerName: winner?.name,
+              isWinner: currentPlayer.id === updatedGame.winnerId,
+              finishedAt: Date.now(),
+              phase: 'finished',
+            };
+            
+            saveGameToHistory(historyEntry);
+          }
         }
         
-        // Gérer la fin de partie (seulement si tous les joueurs ont choisi)
-        const allPlayersChose = updatedGame.players.every(p => choices[p.id] !== undefined);
-        if (allPlayersChose) {
-          await handleGameEnd(gameId);
+        // Si la partie est terminée, gérer les choix
+        if (updatedGame.phase === 'finished') {
+          // Vérifier si le joueur a déjà fait un choix
+          const choices = updatedGame.playerChoices || {};
+          if (user && choices[user.uid]) {
+            setPlayerChoiceState(choices[user.uid]);
+          }
           
-          // Vérifier le résultat après gestion
-          setTimeout(async () => {
-            const updatedGameAfter = await getGame(gameId);
-            if (!updatedGameAfter) {
-              // Lobby supprimé
-              router.push('/dashboard');
-            } else if (updatedGameAfter.phase === 'lobby') {
-              // Retour au lobby
-              router.push(`/lobby?gameId=${gameId}`);
-            }
-          }, 1000);
+          // Gérer la fin de partie (seulement si tous les joueurs ont choisi)
+          const allPlayersChose = updatedGame.players.every(p => choices[p.id] !== undefined);
+          if (allPlayersChose) {
+            await handleGameEnd(gameId);
+            
+            // Vérifier le résultat après gestion
+            setTimeout(async () => {
+              const updatedGameAfter = await getGame(gameId);
+              if (!updatedGameAfter) {
+                // Lobby supprimé
+                router.push('/dashboard');
+              } else if (updatedGameAfter.phase === 'lobby') {
+                // Retour au lobby
+                router.push(`/lobby?gameId=${gameId}`);
+              }
+            }, 1000);
+          }
         }
-      }
     });
 
     return () => {
@@ -393,7 +419,14 @@ export default function GamePage() {
       setPlayerChoiceState(choice);
       await setPlayerChoice(game.id, user.uid, choice);
       
-      // Attendre un peu puis vérifier les choix
+      // Si choix "lobby", retourner immédiatement sans attendre les autres
+      if (choice === 'lobby') {
+        await handleGameEnd(game.id, true); // true = retour immédiat
+        router.push(`/lobby?gameId=${game.id}`);
+        return;
+      }
+      
+      // Si choix "menu", attendre que tous les joueurs choisissent
       setTimeout(async () => {
         await handleGameEnd(game.id);
         const updatedGame = await getGame(game.id);

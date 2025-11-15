@@ -544,12 +544,52 @@ export async function setPlayerChoice(gameId: string, playerId: string, choice: 
 }
 
 // Gérer la fin de partie et les choix des joueurs
-export async function handleGameEnd(gameId: string): Promise<void> {
+export async function handleGameEnd(gameId: string, immediateReturnToLobby: boolean = false): Promise<void> {
   try {
     const game = await getGame(gameId);
     if (!game || game.phase !== 'finished') return;
 
     const choices = game.playerChoices || {};
+    
+    // Si retour immédiat au lobby, traiter directement sans attendre les autres
+    if (immediateReturnToLobby) {
+      const playersWhoChoseLobby = game.players.filter(p => choices[p.id] === 'lobby');
+      
+      if (playersWhoChoseLobby.length > 0) {
+        const newAdmin = playersWhoChoseLobby[0];
+        
+        const updatedPlayers = playersWhoChoseLobby.map(player => ({
+          ...player,
+          board: {
+            cells: Array(12).fill(null).map(() => Array(12).fill('empty')),
+            ships: [],
+          },
+          bombsPlaced: [],
+          bombsRemaining: game.settings.bombsPerPlayer || 0,
+          isAlive: true,
+        }));
+
+        await updateDoc(doc(db, 'games', gameId), {
+          adminId: newAdmin.id,
+          players: updatedPlayers.map(player => ({
+            ...player,
+            board: {
+              ...player.board,
+              cells: cellsToFirestore(player.board.cells),
+            },
+          })),
+          phase: 'lobby',
+          status: 'waiting',
+          currentPlayerIndex: 0,
+          currentTurn: 0,
+          winnerId: deleteField(),
+          playerChoices: {},
+          lastActivity: Date.now(),
+        });
+        return;
+      }
+    }
+
     const allPlayersChose = game.players.every(p => choices[p.id] !== undefined);
 
     if (!allPlayersChose) return; // Attendre que tous les joueurs choisissent
@@ -641,6 +681,12 @@ export async function leaveGame(gameId: string, playerId: string) {
 
     const updatedPlayers = game.players.filter(p => p.id !== playerId);
 
+    // Si l'admin quitte et qu'il n'y a pas d'autres joueurs, supprimer le lobby
+    if (game.adminId === playerId && updatedPlayers.length === 0) {
+      await deleteDoc(doc(db, 'games', gameId));
+      return;
+    }
+
     if (updatedPlayers.length === 0) {
       // Supprimer la partie si plus de joueurs
       await deleteDoc(doc(db, 'games', gameId));
@@ -660,6 +706,44 @@ export async function leaveGame(gameId: string, playerId: string) {
     }
   } catch (error) {
     console.error('Erreur lors de la sortie de la partie:', error);
+  }
+}
+
+// Nettoyer les lobbies vides (appelé périodiquement)
+export async function cleanupEmptyLobbies(): Promise<void> {
+  try {
+    const gamesRef = collection(db, 'games');
+    const q = query(gamesRef, where('phase', '==', 'lobby'));
+    const snapshot = await getDocs(q);
+    const now = Date.now();
+    const THIRTY_SECONDS = 30 * 1000;
+
+    const deletePromises: Promise<void>[] = [];
+
+    snapshot.forEach((docSnapshot) => {
+      const game = docSnapshot.data();
+      const gameId = docSnapshot.id;
+      const players = game.players || [];
+      const lastActivity = game.lastActivity || 0;
+
+      // Supprimer si :
+      // 1. Le lobby n'a pas de joueurs
+      // 2. Le lobby n'a pas été actif depuis 30 secondes ET n'a pas de joueurs
+      if (
+        players.length === 0 ||
+        (lastActivity > 0 && (now - lastActivity) > THIRTY_SECONDS && players.length === 0)
+      ) {
+        deletePromises.push(deleteDoc(doc(db, 'games', gameId)));
+      }
+    });
+
+    await Promise.all(deletePromises);
+    
+    if (deletePromises.length > 0) {
+      console.log(`Nettoyage: ${deletePromises.length} lobby(s) vide(s) supprimé(s)`);
+    }
+  } catch (error) {
+    console.error('Erreur lors du nettoyage des lobbies vides:', error);
   }
 }
 

@@ -3,15 +3,24 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { cleanupEmptyLobbies } from '@/services/gameService';
+import { getGameHistory, GameHistoryEntry } from '@/utils/gameHistory';
 
 export default function DashboardPage() {
   const { user, logout, isAuthenticated } = useAuth();
   const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
+  const [gameHistory, setGameHistory] = useState<GameHistoryEntry[]>([]);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/');
+    } else {
+      // Charger l'historique
+      setGameHistory(getGameHistory());
+      
+      // Nettoyer les lobbies vides au chargement
+      cleanupEmptyLobbies().catch(console.error);
     }
   }, [isAuthenticated, router]);
 
@@ -111,15 +120,58 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Parties récentes (TODO) */}
+          {/* Historique des parties */}
           <div className="mt-8">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Parties récentes
+              📜 Historique des parties
             </h3>
             <div className="bg-white shadow rounded-lg p-6">
-              <p className="text-gray-500 text-center">
-                Aucune partie récente
-              </p>
+              {gameHistory.length === 0 ? (
+                <p className="text-gray-500 text-center">
+                  Aucune partie dans l'historique
+                </p>
+              ) : (
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {gameHistory.map((entry) => (
+                    <div
+                      key={entry.gameId}
+                      className={`p-4 rounded-lg border-2 ${
+                        entry.isWinner
+                          ? 'bg-green-50 border-green-300'
+                          : 'bg-gray-50 border-gray-300'
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-gray-900">
+                              Code: {entry.gameCode}
+                            </span>
+                            {entry.isWinner && (
+                              <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full font-bold">
+                                🏆 VICTOIRE
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <p>
+                              Joueurs: {entry.players.map(p => p.name).join(', ')}
+                            </p>
+                            <p>
+                              Gagnant: <span className="font-semibold" style={{ color: entry.players.find(p => p.id === entry.winnerId)?.color }}>
+                                {entry.winnerName || 'Inconnu'}
+                              </span>
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {new Date(entry.finishedAt).toLocaleString('fr-FR')}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
