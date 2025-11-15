@@ -57,6 +57,12 @@ export default function DashboardPage() {
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">BattleWeb</h1>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
               <button
+                onClick={() => router.push('/tutoriel')}
+                className="bg-green-500 hover:bg-green-700 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
+              >
+                📚 Tutoriel
+              </button>
+              <button
                 onClick={() => router.push('/profile')}
                 className="bg-blue-500 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
               >
