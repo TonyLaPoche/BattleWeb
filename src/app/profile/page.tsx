@@ -3,12 +3,13 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { getUserProfile, updateUsername, UserProfile } from '@/services/userService';
+import { getUserProfile, updateUsername, getUserStats, UserProfile, UserStats } from '@/services/userService';
 
 export default function ProfilePage() {
   const { user, isAuthenticated } = useAuth();
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -38,6 +39,12 @@ export default function ProfilePage() {
         if (userProfile) {
           setProfile(userProfile);
           setUsername(userProfile.username);
+        }
+        
+        // Charger les statistiques
+        const userStats = await getUserStats(user.uid);
+        if (userStats) {
+          setStats(userStats);
         }
       } catch (error) {
         console.error('Erreur lors du chargement du profil:', error);
@@ -215,6 +222,82 @@ export default function ProfilePage() {
                   </div>
                 )}
               </div>
+
+              {/* Statistiques de jeu */}
+              {stats && (
+                <div className="pt-4 border-t border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Statistiques de Jeu</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Parties jouées */}
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <div className="text-sm text-gray-600 mb-1">Parties jouées</div>
+                      <div className="text-2xl font-bold text-blue-700">{stats.gamesPlayed}</div>
+                    </div>
+                    
+                    {/* Taux de victoire */}
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <div className="text-sm text-gray-600 mb-1">Taux de victoire</div>
+                      <div className="text-2xl font-bold text-green-700">{stats.winRate}%</div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {stats.gamesWon} victoires / {stats.gamesPlayed} parties
+                      </div>
+                    </div>
+                    
+                    {/* Précision */}
+                    <div className="bg-purple-50 p-4 rounded-lg">
+                      <div className="text-sm text-gray-600 mb-1">Précision moyenne</div>
+                      <div className="text-2xl font-bold text-purple-700">{stats.averageAccuracy}%</div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {stats.totalHits} touches / {stats.totalShots} tirs
+                      </div>
+                    </div>
+                    
+                    {/* Navires coulés */}
+                    <div className="bg-orange-50 p-4 rounded-lg">
+                      <div className="text-sm text-gray-600 mb-1">Navires coulés</div>
+                      <div className="text-2xl font-bold text-orange-700">{stats.totalShipsSunk}</div>
+                    </div>
+                    
+                    {/* Bombes placées */}
+                    <div className="bg-red-50 p-4 rounded-lg">
+                      <div className="text-sm text-gray-600 mb-1">Bombes placées</div>
+                      <div className="text-2xl font-bold text-red-700">{stats.totalBombsPlaced}</div>
+                    </div>
+                    
+                    {/* Bombes désamorcées */}
+                    <div className="bg-yellow-50 p-4 rounded-lg">
+                      <div className="text-sm text-gray-600 mb-1">Bombes désamorcées</div>
+                      <div className="text-2xl font-bold text-yellow-700">{stats.totalBombsDefused}</div>
+                    </div>
+                  </div>
+                  
+                  {/* Détails supplémentaires */}
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-600">Victoires :</span>
+                        <span className="ml-2 font-semibold text-green-600">{stats.gamesWon}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Défaites :</span>
+                        <span className="ml-2 font-semibold text-red-600">{stats.gamesLost}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Abandons :</span>
+                        <span className="ml-2 font-semibold text-gray-600">{stats.gamesAbandoned}</span>
+                      </div>
+                      {stats.lastGameAt && (
+                        <div>
+                          <span className="text-gray-600">Dernière partie :</span>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {new Date(stats.lastGameAt).toLocaleDateString('fr-FR')}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Informations supplémentaires */}
               <div className="pt-4 border-t border-gray-200">

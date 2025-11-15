@@ -1,10 +1,28 @@
 import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, increment } from 'firebase/firestore';
 
 export interface UserProfile {
   id: string;
   email: string;
   username: string; // Nom d'utilisateur personnalisé
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface UserStats {
+  userId: string;
+  gamesPlayed: number;
+  gamesWon: number;
+  gamesLost: number;
+  gamesAbandoned: number;
+  totalShots: number;
+  totalHits: number;
+  totalShipsSunk: number;
+  totalBombsPlaced: number;
+  totalBombsDefused: number;
+  averageAccuracy: number; // Pourcentage de précision
+  winRate: number; // Pourcentage de victoires
+  lastGameAt?: number; // Timestamp de la dernière partie
   createdAt: number;
   updatedAt: number;
 }
@@ -90,6 +108,104 @@ export async function updateUsername(userId: string, username: string): Promise<
   } catch (error) {
     console.error('Erreur lors de la mise à jour du nom d\'utilisateur:', error);
     throw error;
+  }
+}
+
+// Obtenir les statistiques d'un utilisateur
+export async function getUserStats(userId: string): Promise<UserStats | null> {
+  try {
+    const statsDoc = await getDoc(doc(db, 'user_stats', userId));
+    
+    if (!statsDoc.exists()) {
+      // Créer des statistiques par défaut
+      return await createDefaultStats(userId);
+    }
+    
+    const data = statsDoc.data() as UserStats;
+    
+    // Calculer les pourcentages
+    const stats: UserStats = {
+      ...data,
+      averageAccuracy: data.totalShots > 0 
+        ? Math.round((data.totalHits / data.totalShots) * 100 * 100) / 100 
+        : 0,
+      winRate: data.gamesPlayed > 0 
+        ? Math.round((data.gamesWon / data.gamesPlayed) * 100 * 100) / 100 
+        : 0,
+    };
+    
+    return stats;
+  } catch (error) {
+    console.error('Erreur lors de la récupération des statistiques:', error);
+    return null;
+  }
+}
+
+// Créer des statistiques par défaut
+async function createDefaultStats(userId: string): Promise<UserStats> {
+  const now = Date.now();
+  const defaultStats: UserStats = {
+    userId,
+    gamesPlayed: 0,
+    gamesWon: 0,
+    gamesLost: 0,
+    gamesAbandoned: 0,
+    totalShots: 0,
+    totalHits: 0,
+    totalShipsSunk: 0,
+    totalBombsPlaced: 0,
+    totalBombsDefused: 0,
+    averageAccuracy: 0,
+    winRate: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+  
+  await setDoc(doc(db, 'user_stats', userId), defaultStats);
+  return defaultStats;
+}
+
+// Mettre à jour les statistiques après une partie
+export async function updateUserStatsAfterGame(
+  userId: string,
+  stats: {
+    isWinner: boolean;
+    isAbandoned: boolean;
+    shots: number;
+    hits: number;
+    shipsSunk: number;
+    bombsPlaced: number;
+    bombsDefused: number;
+  }
+): Promise<void> {
+  try {
+    const statsRef = doc(db, 'user_stats', userId);
+    const statsDoc = await getDoc(statsRef);
+    
+    const now = Date.now();
+    
+    if (!statsDoc.exists()) {
+      // Créer les statistiques si elles n'existent pas
+      await createDefaultStats(userId);
+    }
+    
+    // Mettre à jour les statistiques
+    await updateDoc(statsRef, {
+      gamesPlayed: increment(1),
+      gamesWon: stats.isWinner ? increment(1) : increment(0),
+      gamesLost: !stats.isWinner && !stats.isAbandoned ? increment(1) : increment(0),
+      gamesAbandoned: stats.isAbandoned ? increment(1) : increment(0),
+      totalShots: increment(stats.shots),
+      totalHits: increment(stats.hits),
+      totalShipsSunk: increment(stats.shipsSunk),
+      totalBombsPlaced: increment(stats.bombsPlaced),
+      totalBombsDefused: increment(stats.bombsDefused),
+      lastGameAt: now,
+      updatedAt: now,
+    });
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour des statistiques:', error);
+    // Ne pas faire échouer la partie si les stats échouent
   }
 }
 

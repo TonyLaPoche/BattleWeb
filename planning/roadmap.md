@@ -78,8 +78,9 @@ Le développement sera découpé en **4 phases majeures** avec des livrables inc
 - [x] Réinitialisation de mot de passe
 - [x] Nettoyage automatique des parties terminées
 - [x] Système de reprise de parties actives
-- [ ] Statistiques de jeu (à implémenter)
+- [x] Statistiques de jeu (implémenté)
 - [ ] Système d'amis (à implémenter)
+- [ ] Chat en jeu (pendant les parties)
 
 ### Livrables
 - Toutes les mécaniques spéciales

@@ -7,6 +7,7 @@ import { getGame, subscribeToGame, updateGame, placeBomb, defuseBomb, activateBo
 import { Game, Player, Position, CellState, Bomb } from '@/types/game';
 import { Grid } from '@/components/game/Grid';
 import { saveGameToHistory, GameHistoryEntry } from '@/utils/gameHistory';
+import { updateUserStatsAfterGame } from '@/services/userService';
 
 // Hook pour calculer la taille des cellules selon la taille d'écran
 function useCellSize() {
@@ -160,9 +161,9 @@ export default function GamePage() {
         }
       }
       
-        // Si la partie est terminée, sauvegarder dans l'historique
-        if (updatedGame.phase === 'finished' && updatedGame.winnerId) {
-          const currentPlayer = updatedGame.players.find(p => p.id === user?.uid);
+        // Si la partie est terminée, sauvegarder dans l'historique et mettre à jour les stats
+        if (updatedGame.phase === 'finished' && updatedGame.winnerId && user) {
+          const currentPlayer = updatedGame.players.find(p => p.id === user.uid);
           const winner = updatedGame.players.find(p => p.id === updatedGame.winnerId);
           
           if (currentPlayer) {
@@ -182,6 +183,56 @@ export default function GamePage() {
             };
             
             saveGameToHistory(historyEntry);
+            
+            // Calculer les statistiques du joueur pour cette partie
+            // Compter les tirs effectués par le joueur sur les adversaires
+            // (les cases 'hit' ou 'miss' sur les grilles des adversaires)
+            let shots = 0;
+            let hits = 0;
+            let shipsSunk = 0;
+            
+            updatedGame.players
+              .filter(p => p.id !== currentPlayer.id)
+              .forEach(opponent => {
+                // Compter les tirs sur cette grille adverse
+                const opponentShots = opponent.board.cells.flat().filter(
+                  cell => cell === 'hit' || cell === 'miss'
+                ).length;
+                const opponentHits = opponent.board.cells.flat().filter(
+                  cell => cell === 'hit'
+                ).length;
+                
+                // On suppose que tous les tirs sur cette grille sont du joueur actuel
+                // (en réalité, en mode 1v1v1, plusieurs joueurs peuvent tirer sur le même adversaire)
+                // Pour simplifier, on divise par le nombre de joueurs qui ont pu tirer
+                const playersWhoCouldShoot = updatedGame.players.filter(p => p.id !== opponent.id).length;
+                shots += Math.round(opponentShots / playersWhoCouldShoot);
+                hits += Math.round(opponentHits / playersWhoCouldShoot);
+                
+                // Compter les navires coulés de cet adversaire
+                shipsSunk += opponent.board.ships.filter(ship => ship.sunk).length;
+              });
+            
+            const bombsPlaced = currentPlayer.bombsPlaced.length;
+            const bombsDefused = updatedGame.players
+              .filter(p => p.id !== currentPlayer.id)
+              .reduce((total, opponent) => {
+                return total + opponent.bombsPlaced.filter(bomb => 
+                  bomb.targetPlayerId === currentPlayer.id && bomb.defused
+                ).length;
+              }, 0);
+            const isAbandoned = !currentPlayer.isAlive && currentPlayer.id !== updatedGame.winnerId;
+            
+            // Mettre à jour les statistiques
+            await updateUserStatsAfterGame(user.uid, {
+              isWinner: currentPlayer.id === updatedGame.winnerId,
+              isAbandoned,
+              shots,
+              hits,
+              shipsSunk,
+              bombsPlaced,
+              bombsDefused,
+            });
           }
         }
         
