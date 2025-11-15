@@ -22,13 +22,20 @@ function LobbyContent() {
     // Récupérer le code depuis l'URL
     const code = searchParams.get('code');
     const gameId = searchParams.get('gameId');
+    
+    // Si on n'a ni code ni gameId, rediriger vers le dashboard
+    if (!code && !gameId) {
+      router.push('/dashboard');
+      return;
+    }
+    
     if (code) {
       setInitialCode(code);
     } else if (gameId) {
       // Si on a un gameId, on ne fait rien ici, le Lobby le gérera
       setInitialCode(null);
     }
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   const handleGameStart = (game: Game) => {
     // Rediriger vers la phase de placement

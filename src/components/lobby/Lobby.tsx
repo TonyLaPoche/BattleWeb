@@ -6,7 +6,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useGameStore } from '@/stores/gameStore';
 import { Game, LobbyMessage } from '@/types/game';
 import {
-  createGame,
   joinGame,
   getGame,
   subscribeToGame,
@@ -88,31 +87,6 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
       loadGame();
     }
   }, [initialGameId, game, user, setCurrentGame]);
-
-  // Créer une nouvelle partie
-  const handleCreateGame = async () => {
-    if (!user || !playerName) return;
-
-    setLoading(true);
-    setError('');
-
-    try {
-      const newGame = await createGame(user.uid, playerName, {
-        enableBombs: false,
-        bombsPerPlayer: 0,
-        turnTimeLimit: 0, // Illimité par défaut
-        maxPlayers: 3,
-      });
-
-      setGame(newGame);
-      setCurrentGame(newGame);
-    } catch (error) {
-      setError('Erreur lors de la création de la partie');
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Rejoindre une partie
   const handleJoinGame = async (code: string) => {
@@ -230,12 +204,16 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
     }
   };
 
-  // Si pas de partie, afficher l'écran d'accueil du lobby
+  // Si pas de partie, afficher un message avec un bouton retour
   if (!game) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-2xl font-bold text-center mb-8">BattleWeb Lobby</h1>
+          <h1 className="text-2xl font-bold text-center mb-4">BattleWeb Lobby</h1>
+          
+          <p className="text-center text-gray-600 mb-6">
+            Aucune partie trouvée. Retournez au tableau de bord pour créer ou rejoindre une partie.
+          </p>
 
           {error && (
             <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
@@ -243,19 +221,12 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
             </div>
           )}
 
-          <div className="space-y-4">
-            <button
-              onClick={handleCreateGame}
-              disabled={loading}
-              className="w-full bg-blue-500 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold py-3 px-4 rounded-lg transition-colors"
-            >
-              {loading ? 'Création...' : 'Créer une partie'}
-            </button>
-
-            <div className="text-center text-gray-500">ou</div>
-
-            <JoinGameForm onJoin={handleJoinGame} loading={loading} />
-          </div>
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors"
+          >
+            ← Retour au tableau de bord
+          </button>
         </div>
       </div>
     );
@@ -317,41 +288,5 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
         </div>
       </div>
     </div>
-  );
-};
-
-// Composant pour rejoindre une partie
-const JoinGameForm = ({ onJoin, loading }: { onJoin: (code: string) => void; loading: boolean }) => {
-  const [code, setCode] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (code.trim()) {
-      onJoin(code.toUpperCase());
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <label className="block text-gray-700 text-sm font-bold mb-2">
-        Code de partie
-      </label>
-      <input
-        type="text"
-        value={code}
-        onChange={(e) => setCode(e.target.value.toUpperCase())}
-        placeholder="ABC123"
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
-        maxLength={6}
-        disabled={loading}
-      />
-      <button
-        type="submit"
-        disabled={loading || !code.trim()}
-        className="w-full bg-green-500 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg transition-colors"
-      >
-        {loading ? 'Recherche...' : 'Rejoindre'}
-      </button>
-    </form>
   );
 };
