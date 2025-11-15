@@ -730,6 +730,39 @@ export async function leaveGame(gameId: string, playerId: string) {
   }
 }
 
+// Récupérer les parties actives d'un joueur
+export async function getActiveGamesForPlayer(playerId: string): Promise<Game[]> {
+  try {
+    const gamesRef = collection(db, 'games');
+    // Récupérer toutes les parties actives (lobby, placement, playing)
+    // Firestore ne supporte pas !=, donc on utilise 'in' avec les phases actives
+    const q = query(gamesRef, where('phase', 'in', ['lobby', 'placement', 'playing']));
+    const querySnapshot = await getDocs(q);
+
+    const activeGames: Game[] = [];
+
+    querySnapshot.forEach((docSnapshot) => {
+      try {
+        const game = gameFromFirestore(docSnapshot.data());
+        // Vérifier si le joueur est dans cette partie
+        if (game.players.some(p => p.id === playerId)) {
+          activeGames.push(game);
+        }
+      } catch (error) {
+        console.error('Erreur lors de la conversion d\'une partie:', error);
+      }
+    });
+
+    // Trier par dernière activité (plus récent en premier)
+    activeGames.sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
+
+    return activeGames;
+  } catch (error) {
+    console.error('Erreur lors de la récupération des parties actives:', error);
+    return [];
+  }
+}
+
 // Nettoyer les lobbies vides (appelé périodiquement)
 export async function cleanupEmptyLobbies(): Promise<void> {
   try {

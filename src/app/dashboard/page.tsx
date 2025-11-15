@@ -3,9 +3,10 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { cleanupEmptyLobbies, createGame } from '@/services/gameService';
+import { cleanupEmptyLobbies, createGame, getActiveGamesForPlayer } from '@/services/gameService';
 import { getGameHistory, GameHistoryEntry } from '@/utils/gameHistory';
 import { getUserProfile, createOrUpdateUserProfile } from '@/services/userService';
+import { Game } from '@/types/game';
 
 export default function DashboardPage() {
   const { user, logout, isAuthenticated } = useAuth();
@@ -14,6 +15,8 @@ export default function DashboardPage() {
   const [gameHistory, setGameHistory] = useState<GameHistoryEntry[]>([]);
   const [creating, setCreating] = useState(false);
   const [playerName, setPlayerName] = useState<string>('');
+  const [activeGames, setActiveGames] = useState<Game[]>([]);
+  const [loadingActiveGames, setLoadingActiveGames] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -45,7 +48,23 @@ export default function DashboardPage() {
         }
       };
       
+      // Charger les parties actives
+      const loadActiveGames = async () => {
+        if (!user?.uid) return;
+        
+        setLoadingActiveGames(true);
+        try {
+          const games = await getActiveGamesForPlayer(user.uid);
+          setActiveGames(games);
+        } catch (error) {
+          console.error('Erreur lors du chargement des parties actives:', error);
+        } finally {
+          setLoadingActiveGames(false);
+        }
+      };
+      
       loadPlayerName();
+      loadActiveGames();
     }
   }, [isAuthenticated, router, user]);
 
@@ -176,6 +195,111 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Parties actives */}
+          <div className="mt-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                🎮 Parties en cours
+              </h3>
+              <button
+                onClick={async () => {
+                  if (!user?.uid) return;
+                  setLoadingActiveGames(true);
+                  try {
+                    const games = await getActiveGamesForPlayer(user.uid);
+                    setActiveGames(games);
+                  } catch (error) {
+                    console.error('Erreur lors du rafraîchissement:', error);
+                  } finally {
+                    setLoadingActiveGames(false);
+                  }
+                }}
+                disabled={loadingActiveGames}
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium disabled:text-gray-400"
+              >
+                {loadingActiveGames ? 'Chargement...' : '🔄 Rafraîchir'}
+              </button>
+            </div>
+            {activeGames.length > 0 ? (
+              <div className="bg-white shadow rounded-lg p-6">
+                <div className="space-y-3">
+                  {activeGames.map((game) => {
+                    const currentPlayer = game.players.find(p => p.id === user?.uid);
+                    const isAdmin = game.adminId === user?.uid;
+                    const phaseLabels: Record<string, string> = {
+                      'lobby': 'Lobby',
+                      'placement': 'Placement des navires',
+                      'playing': 'Partie en cours',
+                    };
+                    const phaseColors: Record<string, string> = {
+                      'lobby': 'bg-blue-100 text-blue-800',
+                      'placement': 'bg-yellow-100 text-yellow-800',
+                      'playing': 'bg-green-100 text-green-800',
+                    };
+
+                    return (
+                      <div
+                        key={game.id}
+                        className="p-4 rounded-lg border-2 border-gray-200 hover:border-blue-400 transition-colors"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="font-semibold text-gray-900">
+                                Code: {game.code}
+                              </span>
+                              {isAdmin && (
+                                <span className="text-xs bg-purple-500 text-white px-2 py-1 rounded-full font-bold">
+                                  👑 Admin
+                                </span>
+                              )}
+                              <span className={`text-xs px-2 py-1 rounded-full font-bold ${phaseColors[game.phase] || 'bg-gray-100 text-gray-800'}`}>
+                                {phaseLabels[game.phase] || game.phase}
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              <p>
+                                Joueurs: {game.players.map(p => p.name).join(', ')} ({game.players.length}/{game.settings.maxPlayers})
+                              </p>
+                              {currentPlayer && !currentPlayer.isAlive && (
+                                <p className="text-red-600 font-semibold mt-1">
+                                  💀 Vous avez été éliminé
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              // Rediriger vers la page appropriée selon la phase
+                              if (game.phase === 'lobby') {
+                                router.push(`/lobby?gameId=${game.id}`);
+                              } else if (game.phase === 'placement') {
+                                router.push(`/placement?gameId=${game.id}`);
+                              } else if (game.phase === 'playing') {
+                                router.push(`/game/${game.id}`);
+                              }
+                            }}
+                            className="px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white font-semibold rounded transition-colors whitespace-nowrap"
+                          >
+                            {game.phase === 'lobby' ? 'Rejoindre le lobby' : 
+                             game.phase === 'placement' ? 'Continuer le placement' : 
+                             'Reprendre la partie'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white shadow rounded-lg p-6">
+                <p className="text-gray-500 text-center">
+                  Aucune partie en cours
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Historique des parties */}
