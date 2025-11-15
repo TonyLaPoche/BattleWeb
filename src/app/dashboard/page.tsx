@@ -56,7 +56,12 @@ export default function DashboardPage() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 gap-4">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">BattleWeb</h1>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
-              <span className="text-sm sm:text-base text-gray-700 text-center sm:text-left">Bonjour, {user?.email?.split('@')[0]}</span>
+              <button
+                onClick={() => router.push('/profile')}
+                className="bg-blue-500 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
+              >
+                👤 Profil
+              </button>
               <button
                 onClick={handleLogout}
                 className="bg-red-500 hover:bg-red-700 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base"

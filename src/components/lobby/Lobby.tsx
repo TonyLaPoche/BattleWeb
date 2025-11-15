@@ -14,6 +14,7 @@ import {
   updateGameSettings,
   startGame
 } from '@/services/gameService';
+import { getUserProfile, createOrUpdateUserProfile } from '@/services/userService';
 import { LobbyChat } from './LobbyChat';
 import { LobbySettings } from './LobbySettings';
 import { LobbyPlayers } from './LobbyPlayers';
@@ -33,6 +34,36 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
   const [chatMessages, setChatMessages] = useState<LobbyMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [playerName, setPlayerName] = useState<string>('');
+
+  // Charger le nom d'utilisateur du profil
+  useEffect(() => {
+    const loadPlayerName = async () => {
+      if (!user?.uid || !user?.email) return;
+
+      try {
+        let profile = await getUserProfile(user.uid);
+        
+        // Si le profil n'existe pas, le créer
+        if (!profile) {
+          profile = await createOrUpdateUserProfile(user.uid, user.email);
+        }
+        
+        if (profile) {
+          setPlayerName(profile.username);
+        } else {
+          // Fallback sur l'email si le profil n'existe toujours pas
+          setPlayerName(user.email.split('@')[0]);
+        }
+      } catch (error) {
+        console.error('Erreur lors du chargement du profil:', error);
+        // Fallback sur l'email en cas d'erreur
+        setPlayerName(user.email?.split('@')[0] || 'Joueur');
+      }
+    };
+
+    loadPlayerName();
+  }, [user]);
 
   // Charger la partie si on a un gameId
   useEffect(() => {
@@ -57,13 +88,13 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
 
   // Créer une nouvelle partie
   const handleCreateGame = async () => {
-    if (!user) return;
+    if (!user || !playerName) return;
 
     setLoading(true);
     setError('');
 
     try {
-      const newGame = await createGame(user.uid, user.email || 'Joueur', {
+      const newGame = await createGame(user.uid, playerName, {
         enableBombs: false,
         bombsPerPlayer: 0,
         turnTimeLimit: 0, // Illimité par défaut
@@ -82,13 +113,13 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
 
   // Rejoindre une partie
   const handleJoinGame = async (code: string) => {
-    if (!user) return;
+    if (!user || !playerName) return;
 
     setLoading(true);
     setError('');
 
     try {
-      const joinedGame = await joinGame(code, user.uid, user.email || 'Joueur');
+      const joinedGame = await joinGame(code, user.uid, playerName);
       if (joinedGame) {
         setGame(joinedGame);
         setCurrentGame(joinedGame);
@@ -136,10 +167,10 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
 
   // Envoyer un message
   const handleSendMessage = async (message: string) => {
-    if (!game?.id || !user) return;
+    if (!game?.id || !user || !playerName) return;
 
     try {
-      await sendChatMessage(game.id, user.uid, user.email || 'Joueur', message);
+      await sendChatMessage(game.id, user.uid, playerName, message);
     } catch (error) {
       console.error('Erreur lors de l\'envoi du message:', error);
     }

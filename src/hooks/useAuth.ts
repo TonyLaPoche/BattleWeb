@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/authStore';
+import { createOrUpdateUserProfile } from '@/services/userService';
 
 export const useAuth = () => {
   const { user, loading, setUser, setLoading } = useAuthStore();
@@ -53,6 +54,12 @@ export const useAuth = () => {
       }
       
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      
+      // Créer le profil utilisateur dans Firestore
+      if (userCredential.user) {
+        await createOrUpdateUserProfile(userCredential.user.uid, email);
+      }
+      
       return userCredential;
     } catch (error: any) {
       // Re-lancer l'erreur pour que le composant puisse la gérer
@@ -68,12 +75,25 @@ export const useAuth = () => {
     }
   };
 
+  const resetPassword = async (email: string) => {
+    try {
+      if (!email || !email.includes('@')) {
+        throw new Error('Email invalide');
+      }
+      
+      await sendPasswordResetEmail(auth, email);
+    } catch (error: any) {
+      throw error;
+    }
+  };
+
   return {
     user,
     loading,
     login,
     register,
     logout,
+    resetPassword,
     isAuthenticated: !!user,
   };
 };
