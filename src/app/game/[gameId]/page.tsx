@@ -45,6 +45,8 @@ export default function GamePage() {
   const [error, setError] = useState('');
   const [actionMode, setActionMode] = useState<'shot' | 'bomb'>('shot'); // Mode d'action : tir ou bombe
   const [playerChoice, setPlayerChoiceState] = useState<'lobby' | 'menu' | null>(null); // Choix du joueur actuel
+  const [selectedTarget, setSelectedTarget] = useState<string | null>(null); // Adversaire sélectionné pour attaquer
+  const [hasShotThisTurn, setHasShotThisTurn] = useState(false); // Vérifier si on a déjà tiré ce tour
   const { cellSize, padding } = useCellSize();
 
   // Charger la partie et écouter les changements
@@ -134,15 +136,41 @@ export default function GamePage() {
   const currentPlayer = game?.players.find(p => p.id === user?.uid);
   const isCurrentTurn = game && game.players[game.currentPlayerIndex]?.id === user?.uid;
   const currentPlayerTurn = game?.players[game.currentPlayerIndex];
+  
+  // Obtenir les adversaires (joueurs vivants sauf soi)
+  const opponents = game?.players.filter(p => p.id !== user?.uid && p.isAlive) || [];
+  
+  // Réinitialiser le tir et la sélection quand le tour change
+  useEffect(() => {
+    if (game && isCurrentTurn) {
+      setHasShotThisTurn(false);
+      setSelectedTarget(null);
+      setActionMode('shot');
+    }
+  }, [game?.currentTurn, isCurrentTurn]);
 
   // Gérer un tir
   const handleCellClick = async (opponentId: string, x: number, y: number) => {
     if (!game || !user || !isCurrentTurn || !currentPlayer) return;
     if (game.phase !== 'playing') return;
+    if (hasShotThisTurn) {
+      setError('Vous avez déjà tiré ce tour. Attendez votre prochain tour.');
+      return;
+    }
+    if (actionMode === 'bomb') {
+      // Gérer le placement de bombe séparément
+      return;
+    }
+
+    // Vérifier qu'un adversaire est sélectionné
+    if (!selectedTarget || selectedTarget !== opponentId) {
+      setError('Sélectionnez d\'abord un adversaire à attaquer');
+      return;
+    }
 
     // Trouver le joueur cible
     const targetPlayer = game.players.find(p => p.id === opponentId);
-    if (!targetPlayer || targetPlayer.id === user.uid) return;
+    if (!targetPlayer || targetPlayer.id === user.uid || !targetPlayer.isAlive) return;
 
     const cellState = targetPlayer.board.cells[y]?.[x];
     if (cellState === 'hit' || cellState === 'miss' || cellState === 'revealed') {
@@ -231,13 +259,19 @@ export default function GamePage() {
       // Mettre à jour la partie
       await updateGame(game.id, gameUpdates);
       
+      // Marquer qu'on a tiré ce tour
+      setHasShotThisTurn(true);
+      setSelectedTarget(null);
+      
       // Activer les bombes après le changement de tour
       if (!winnerId) {
         await activateBombs(game.id);
       }
+      
+      setError('');
     } catch (error: any) {
       console.error('Erreur lors du tir:', error);
-      setError('Erreur lors du tir');
+      setError(error.message || 'Erreur lors du tir');
     }
   };
 
@@ -387,9 +421,6 @@ export default function GamePage() {
     .map(p => choices[p.id])
     .find(c => c !== undefined);
 
-  // Obtenir les adversaires (joueurs autres que le joueur actuel)
-  const opponents = game.players.filter(p => p.id !== user?.uid);
-
   // Créer une grille masquée pour l'adversaire (ne montre pas les navires, seulement les tirs)
   const getOpponentGrid = (opponent: Player): CellState[][] => {
     return opponent.board.cells.map((row, y) =>
@@ -502,31 +533,48 @@ export default function GamePage() {
             )}
             
             {/* Boutons Tir/Bombe */}
-            {isCurrentTurn && game.settings.enableBombs && game.settings.bombsPerPlayer > 0 && (
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setActionMode('shot')}
-                  className={`px-5 py-3 rounded-xl font-bold transition-all shadow-lg ${
-                    actionMode === 'shot'
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white scale-105 ring-4 ring-blue-300'
-                      : 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700 hover:from-gray-300 hover:to-gray-400 hover:scale-105'
-                  }`}
-                >
-                  🎯 Tir
-                </button>
-                <button
-                  onClick={() => setActionMode('bomb')}
-                  disabled={currentPlayer.bombsRemaining <= 0}
-                  className={`px-5 py-3 rounded-xl font-bold transition-all shadow-lg ${
-                    actionMode === 'bomb'
-                      ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white scale-105 ring-4 ring-orange-300'
-                      : currentPlayer.bombsRemaining > 0
-                      ? 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700 hover:from-gray-300 hover:to-gray-400 hover:scale-105'
-                      : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  💣 Bombe <span className="ml-1 bg-white/30 px-2 py-0.5 rounded-full">({currentPlayer.bombsRemaining})</span>
-                </button>
+            {isCurrentTurn && !hasShotThisTurn && (
+              <div className="flex flex-wrap items-center gap-3 justify-center sm:justify-start">
+                {game.settings.enableBombs && game.settings.bombsPerPlayer > 0 && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setActionMode('shot');
+                        setSelectedTarget(null);
+                        setError('');
+                      }}
+                      className={`px-4 sm:px-5 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all shadow-lg ${
+                        actionMode === 'shot'
+                          ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white scale-105 ring-4 ring-blue-300'
+                          : 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700 hover:from-gray-300 hover:to-gray-400 hover:scale-105'
+                      }`}
+                    >
+                      🎯 Tir
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActionMode('bomb');
+                        setSelectedTarget(null);
+                        setError('');
+                      }}
+                      disabled={currentPlayer.bombsRemaining <= 0}
+                      className={`px-4 sm:px-5 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all shadow-lg ${
+                        actionMode === 'bomb'
+                          ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white scale-105 ring-4 ring-orange-300'
+                          : currentPlayer.bombsRemaining > 0
+                          ? 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700 hover:from-gray-300 hover:to-gray-400 hover:scale-105'
+                          : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      💣 Bombe <span className="ml-1 bg-white/30 px-2 py-0.5 rounded-full">({currentPlayer.bombsRemaining})</span>
+                    </button>
+                  </>
+                )}
+                {hasShotThisTurn && (
+                  <div className="px-4 py-2 bg-yellow-100 border-2 border-yellow-400 text-yellow-800 rounded-lg font-semibold">
+                    ✓ Tir effectué ce tour
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -576,8 +624,48 @@ export default function GamePage() {
           </div>
         )}
 
+        {/* Sélecteur d'adversaire (si c'est votre tour et mode tir) */}
+        {isCurrentTurn && actionMode === 'shot' && !hasShotThisTurn && opponents.length > 1 && (
+          <div className="mb-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-lg border-2 border-blue-200">
+            <h3 className="text-lg font-bold text-blue-900 mb-3 text-center sm:text-left">
+              🎯 Sélectionnez un adversaire à attaquer
+            </h3>
+            <div className="flex flex-wrap gap-3 justify-center sm:justify-start">
+              {opponents.map((opponent) => (
+                <button
+                  key={opponent.id}
+                  onClick={() => {
+                    setSelectedTarget(opponent.id);
+                    setError('');
+                  }}
+                  className={`px-4 py-2 rounded-lg font-semibold transition-all shadow-md ${
+                    selectedTarget === opponent.id
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 text-white scale-105 ring-4 ring-red-300'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border-2 border-gray-300'
+                  }`}
+                  style={selectedTarget !== opponent.id ? { borderColor: opponent.color } : {}}
+                >
+                  <span className="w-3 h-3 rounded-full inline-block mr-2" style={{ backgroundColor: opponent.color }}></span>
+                  {opponent.name}
+                </button>
+              ))}
+            </div>
+            {selectedTarget && (
+              <p className="mt-3 text-sm text-blue-700 text-center sm:text-left">
+                ✓ Adversaire sélectionné : <span className="font-bold">{opponents.find(o => o.id === selectedTarget)?.name}</span>
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Grilles des adversaires */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6">
+        <div className={`grid gap-4 sm:gap-6 mb-6 ${
+          opponents.length === 1 
+            ? 'grid-cols-1' 
+            : opponents.length === 2 
+            ? 'grid-cols-1 lg:grid-cols-2' 
+            : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3'
+        }`}>
           {opponents.map((opponent) => (
             <div key={opponent.id} className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-xl border-2 border-gray-200 p-3 sm:p-6">
               <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-4 flex items-center justify-center sm:justify-start" style={{ color: opponent.color }}>
@@ -591,15 +679,17 @@ export default function GamePage() {
                   <Grid
                     cells={getOpponentGrid(opponent)}
                     onCellClick={
-                      isCurrentTurn && opponent.isAlive
+                      isCurrentTurn && opponent.isAlive && !hasShotThisTurn
                         ? actionMode === 'shot'
-                          ? (x, y) => handleCellClick(opponent.id, x, y)
+                          ? selectedTarget === opponent.id
+                            ? (x, y) => handleCellClick(opponent.id, x, y)
+                            : undefined
                           : (x, y) => handleBombPlace(opponent.id, x, y)
                         : undefined
                     }
-                    interactive={!!(isCurrentTurn && opponent.isAlive)}
+                    interactive={!!(isCurrentTurn && opponent.isAlive && !hasShotThisTurn && (actionMode === 'bomb' || selectedTarget === opponent.id))}
                     showCoordinates={true}
-                    className="shadow-md"
+                    className={`shadow-md ${selectedTarget === opponent.id && isCurrentTurn && actionMode === 'shot' ? 'ring-4 ring-red-400 ring-opacity-50' : ''}`}
                   />
                   
                   {/* Afficher les bombes actives sur cette grille */}
