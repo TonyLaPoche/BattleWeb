@@ -37,12 +37,12 @@ export const LobbySettings = ({
                 type="checkbox"
                 checked={settings.enableBombs && (settings.bombsPerPlayer ?? 0) > 0}
                 onChange={(e) => {
-                  handleSettingChange('enableBombs', e.target.checked);
-                  if (!e.target.checked) {
-                    handleSettingChange('bombsPerPlayer', 0);
-                  } else if ((settings.bombsPerPlayer ?? 0) === 0) {
-                    handleSettingChange('bombsPerPlayer', 1);
-                  }
+                  const checked = e.target.checked;
+                  // Mettre à jour les deux valeurs en même temps
+                  onUpdateSettings({
+                    enableBombs: checked,
+                    bombsPerPlayer: checked ? ((settings.bombsPerPlayer ?? 0) > 0 ? settings.bombsPerPlayer : 1) : 0,
+                  });
                 }}
                 className="sr-only peer"
               />
@@ -59,8 +59,11 @@ export const LobbySettings = ({
               value={settings.bombsPerPlayer ?? 0}
               onChange={(e) => {
                 const value = parseInt(e.target.value);
-                handleSettingChange('bombsPerPlayer', value);
-                handleSettingChange('enableBombs', value > 0);
+                // Mettre à jour les deux valeurs en même temps
+                onUpdateSettings({
+                  bombsPerPlayer: value,
+                  enableBombs: value > 0,
+                });
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
