@@ -199,13 +199,16 @@ export async function getGame(gameId: string): Promise<Game | null> {
 }
 
 // Écouter les changements d'une partie en temps réel
-export function subscribeToGame(gameId: string, callback: (game: Game) => void) {
+export function subscribeToGame(gameId: string, callback: (game: Game | null) => void) {
   const gameRef = doc(db, 'games', gameId);
 
   const unsubscribe = onSnapshot(gameRef, (doc) => {
     if (doc.exists()) {
       const game = gameFromFirestore(doc.data());
       callback(game);
+    } else {
+      // Le jeu a été supprimé
+      callback(null);
     }
   });
 

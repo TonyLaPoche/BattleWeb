@@ -149,6 +149,12 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
     if (!game?.id) return;
 
     const unsubscribe = subscribeToGame(game.id, (updatedGame) => {
+      // Si le jeu a été supprimé, rediriger vers le dashboard
+      if (!updatedGame) {
+        router.push('/dashboard');
+        return;
+      }
+
       setGame(updatedGame);
 
       // Si la partie commence, appeler le callback
@@ -158,7 +164,7 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
     });
 
     return unsubscribe;
-  }, [game?.id, onGameStart]);
+  }, [game?.id, onGameStart, router]);
 
   // Écouter le chat
   useEffect(() => {

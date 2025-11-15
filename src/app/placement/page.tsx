@@ -64,15 +64,21 @@ function PlacementPageContent() {
 
     loadGame();
     
-    // Écouter les changements de la partie en temps réel
-    const unsubscribe = subscribeToGame(gameId, (updatedGame) => {
-      setGame(updatedGame);
-      
-      // Si la phase passe à 'playing', rediriger vers le jeu
-      if (updatedGame.phase === 'playing') {
-        router.push(`/game/${gameId}`);
-      }
-    });
+      // Écouter les changements de la partie en temps réel
+      const unsubscribe = subscribeToGame(gameId, (updatedGame) => {
+        // Si le jeu a été supprimé, rediriger vers le dashboard
+        if (!updatedGame) {
+          router.push('/dashboard');
+          return;
+        }
+
+        setGame(updatedGame);
+        
+        // Si la phase passe à 'playing', rediriger vers le jeu
+        if (updatedGame.phase === 'playing') {
+          router.push(`/game/${gameId}`);
+        }
+      });
 
     return () => {
       unsubscribe();

@@ -96,6 +96,12 @@ export default function GamePage() {
     const unsubscribe = subscribeToGame(gameId, async (updatedGame) => {
       setGame(updatedGame);
       
+      // Si le jeu a été supprimé, rediriger vers le dashboard
+      if (!updatedGame) {
+        router.push('/dashboard');
+        return;
+      }
+
       // Activer les bombes qui doivent s'activer
       if (updatedGame.phase === 'playing') {
         await activateBombs(gameId);
