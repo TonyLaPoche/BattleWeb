@@ -6,7 +6,6 @@ export const metadata: Metadata = {
   title: 'BattleWeb - Jeu de bataille navale multi-joueurs',
   description: 'Jeu de stratégie naval en ligne avec mécaniques innovantes de bombes de détection',
   manifest: '/manifest.json',
-  themeColor: '#3b82f6',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -23,6 +22,7 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   viewportFit: 'cover',
+  themeColor: '#3b82f6',
 }
 
 export default function RootLayout({

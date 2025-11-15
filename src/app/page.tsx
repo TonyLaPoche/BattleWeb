@@ -3,9 +3,9 @@
 import { useAuth } from '@/hooks/useAuth';
 import { AuthForm } from '@/components/auth/AuthForm';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 
-export default function HomePage() {
+function HomePageContent() {
   const { isAuthenticated, loading } = useAuth();
   const router = useRouter();
 
@@ -42,5 +42,21 @@ export default function HomePage() {
         <AuthForm mode="login" />
       </div>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-blue-500 flex items-center justify-center">
+        <div className="bg-white p-8 rounded-lg shadow-lg">
+          <div className="text-2xl font-bold text-blue-600 mb-4">BattleWeb</div>
+          <div className="text-xl text-gray-600">Chargement...</div>
+          <div className="mt-4 w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+        </div>
+      </div>
+    }>
+      <HomePageContent />
+    </Suspense>
   );
 }

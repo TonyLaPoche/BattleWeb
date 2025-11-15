@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Grid } from '@/components/game/Grid';
 import { ShipPlacer } from '@/components/game/ShipPlacer';
@@ -9,7 +9,7 @@ import { useShipPlacement } from '@/hooks/useGameLogic';
 import { getGame, updateGame, subscribeToGame } from '@/services/gameService';
 import { Game, Player } from '@/types/game';
 
-export default function PlacementPage() {
+function PlacementPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
@@ -258,5 +258,17 @@ export default function PlacementPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PlacementPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl">Chargement de la partie...</div>
+      </div>
+    }>
+      <PlacementPageContent />
+    </Suspense>
   );
 }
