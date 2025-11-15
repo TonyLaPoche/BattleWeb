@@ -144,10 +144,17 @@ export default function GamePage() {
   useEffect(() => {
     if (game && isCurrentTurn) {
       setHasShotThisTurn(false);
-      setSelectedTarget(null);
       setActionMode('shot');
+      
+      // Si un seul adversaire, le sélectionner automatiquement
+      const aliveOpponents = game.players.filter(p => p.id !== user?.uid && p.isAlive);
+      if (aliveOpponents.length === 1) {
+        setSelectedTarget(aliveOpponents[0].id);
+      } else {
+        setSelectedTarget(null);
+      }
     }
-  }, [game?.currentTurn, isCurrentTurn]);
+  }, [game?.currentTurn, isCurrentTurn, game?.players, user?.uid]);
 
   // Gérer un tir
   const handleCellClick = async (opponentId: string, x: number, y: number) => {
@@ -162,9 +169,15 @@ export default function GamePage() {
       return;
     }
 
-    // Vérifier qu'un adversaire est sélectionné
-    if (!selectedTarget || selectedTarget !== opponentId) {
+    // Vérifier qu'un adversaire est sélectionné (sauf si un seul adversaire)
+    if (opponents.length > 1 && (!selectedTarget || selectedTarget !== opponentId)) {
       setError('Sélectionnez d\'abord un adversaire à attaquer');
+      return;
+    }
+    
+    // Si un seul adversaire, utiliser son ID automatiquement
+    const targetId = opponents.length === 1 ? opponents[0].id : selectedTarget;
+    if (!targetId || targetId !== opponentId) {
       return;
     }
 
@@ -681,15 +694,15 @@ export default function GamePage() {
                     onCellClick={
                       isCurrentTurn && opponent.isAlive && !hasShotThisTurn
                         ? actionMode === 'shot'
-                          ? selectedTarget === opponent.id
+                          ? (opponents.length === 1 || selectedTarget === opponent.id)
                             ? (x, y) => handleCellClick(opponent.id, x, y)
                             : undefined
                           : (x, y) => handleBombPlace(opponent.id, x, y)
                         : undefined
                     }
-                    interactive={!!(isCurrentTurn && opponent.isAlive && !hasShotThisTurn && (actionMode === 'bomb' || selectedTarget === opponent.id))}
+                    interactive={!!(isCurrentTurn && opponent.isAlive && !hasShotThisTurn && (actionMode === 'bomb' || opponents.length === 1 || selectedTarget === opponent.id))}
                     showCoordinates={true}
-                    className={`shadow-md ${selectedTarget === opponent.id && isCurrentTurn && actionMode === 'shot' ? 'ring-4 ring-red-400 ring-opacity-50' : ''}`}
+                    className={`shadow-md ${(opponents.length === 1 || selectedTarget === opponent.id) && isCurrentTurn && actionMode === 'shot' ? 'ring-4 ring-red-400 ring-opacity-50' : ''}`}
                   />
                   
                   {/* Afficher les bombes actives sur cette grille */}
