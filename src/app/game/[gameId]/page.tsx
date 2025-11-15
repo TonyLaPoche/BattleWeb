@@ -240,8 +240,12 @@ export default function GamePage() {
       });
 
       await activateBombs(game.id);
+      
+      // Effacer le message d'erreur après un court délai
+      setTimeout(() => setError(''), 2000);
     } catch (error) {
       console.error('Erreur lors du passage au tour suivant:', error);
+      setError('Erreur lors du passage au tour suivant');
     }
   };
 
