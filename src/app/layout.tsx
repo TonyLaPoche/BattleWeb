@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
-import './globals.css'
-import { ServiceWorkerRegistration } from './sw-register'
+import '@/app/globals.css'
+import { ServiceWorkerRegistration } from '@/app/sw-register'
 
 export const metadata: Metadata = {
   title: 'BattleWeb - Jeu de bataille navale multi-joueurs',
