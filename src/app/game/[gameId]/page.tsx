@@ -48,6 +48,7 @@ export default function GamePage() {
   const [playerChoice, setPlayerChoiceState] = useState<'lobby' | 'menu' | null>(null); // Choix du joueur actuel
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null); // Adversaire sélectionné pour attaquer
   const [hasShotThisTurn, setHasShotThisTurn] = useState(false); // Vérifier si on a déjà tiré ce tour
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null); // Temps restant en secondes
   const { cellSize, padding } = useCellSize();
 
   // Charger la partie et écouter les changements
@@ -182,6 +183,68 @@ export default function GamePage() {
     }
   }, [game?.currentTurn, isCurrentTurn, game?.players, user?.uid]);
 
+  // Gérer le timer du tour
+  useEffect(() => {
+    if (!game || game.phase !== 'playing' || !game.settings.turnTimeLimit || game.settings.turnTimeLimit === 0) {
+      setTimeRemaining(null);
+      return;
+    }
+
+    // Si turnStartTime n'est pas défini, l'initialiser
+    if (!game.turnStartTime && isCurrentTurn) {
+      updateGame(game.id, { turnStartTime: Date.now() }).catch(console.error);
+      return;
+    }
+
+    const turnStartTime = game.turnStartTime || Date.now();
+    const timeLimit = game.settings.turnTimeLimit * 1000; // Convertir en millisecondes
+
+    const updateTimer = () => {
+      const elapsed = Date.now() - turnStartTime;
+      const remaining = Math.max(0, Math.floor((timeLimit - elapsed) / 1000));
+      setTimeRemaining(remaining);
+
+      // Si le temps est écoulé et que c'est le tour du joueur actuel, passer au tour suivant
+      if (remaining === 0 && isCurrentTurn && !hasShotThisTurn) {
+        handleTimeExpired();
+      }
+    };
+
+    // Mettre à jour immédiatement
+    updateTimer();
+
+    // Mettre à jour toutes les secondes
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+  }, [game?.turnStartTime, game?.settings.turnTimeLimit, game?.currentTurn, isCurrentTurn, hasShotThisTurn, game?.id]);
+
+  // Gérer l'expiration du temps
+  const handleTimeExpired = async () => {
+    if (!game || !isCurrentTurn || hasShotThisTurn) return;
+
+    try {
+      // Passer au joueur suivant
+      const alivePlayers = game.players.filter(p => p.isAlive);
+      let nextPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+      
+      // S'assurer que le prochain joueur est vivant
+      while (!game.players[nextPlayerIndex].isAlive && nextPlayerIndex !== game.currentPlayerIndex) {
+        nextPlayerIndex = (nextPlayerIndex + 1) % game.players.length;
+      }
+
+      await updateGame(game.id, {
+        currentPlayerIndex: nextPlayerIndex,
+        currentTurn: game.currentTurn + 1,
+        turnStartTime: Date.now(),
+      });
+
+      await activateBombs(game.id);
+    } catch (error) {
+      console.error('Erreur lors du passage au tour suivant:', error);
+    }
+  };
+
   // Gérer un tir
   const handleCellClick = async (opponentId: string, x: number, y: number) => {
     if (!game || !user || !isCurrentTurn || !currentPlayer) return;
@@ -288,6 +351,7 @@ export default function GamePage() {
         currentTurn: winnerId ? game.currentTurn : game.currentTurn + 1,
         phase: winnerId ? 'finished' : 'playing',
         status: winnerId ? 'finished' : 'active',
+        turnStartTime: winnerId ? undefined : Date.now(), // Réinitialiser le timer pour le nouveau tour
       };
 
       // Ajouter winnerId seulement s'il y a un gagnant
@@ -348,19 +412,34 @@ export default function GamePage() {
   const handleDefuseBomb = async (bombId: string) => {
     if (!game || !user || !isCurrentTurn || !currentPlayer) return;
     if (game.phase !== 'playing') return;
+    if (hasShotThisTurn) {
+      setError('Vous avez déjà utilisé votre action ce tour.');
+      return;
+    }
 
     try {
       await defuseBomb(game.id, user.uid, bombId);
       
       // Passer au joueur suivant après désamorçage (perd son tour de tir)
-      const nextPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+      const alivePlayers = game.players.filter(p => p.isAlive);
+      let nextPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+      
+      // S'assurer que le prochain joueur est vivant
+      while (!game.players[nextPlayerIndex].isAlive && nextPlayerIndex !== game.currentPlayerIndex) {
+        nextPlayerIndex = (nextPlayerIndex + 1) % game.players.length;
+      }
+      
       await updateGame(game.id, {
         currentPlayerIndex: nextPlayerIndex,
         currentTurn: (game.currentTurn || 0) + 1,
+        turnStartTime: Date.now(), // Réinitialiser le timer pour le nouveau tour
       });
       
       // Activer les bombes
       await activateBombs(game.id);
+      
+      // Marquer qu'on a utilisé son action ce tour
+      setHasShotThisTurn(true);
     } catch (error: any) {
       console.error('Erreur lors du désamorçage:', error);
       setError(error.message || 'Erreur lors du désamorçage');
@@ -566,6 +645,19 @@ export default function GamePage() {
             <div className="px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 text-gray-700 font-semibold text-sm sm:text-base">
               👥 Joueurs vivants: <span className="text-blue-600">{game.players.filter(p => p.isAlive).length}/{game.players.length}</span>
             </div>
+            
+            {/* Timer du tour */}
+            {timeRemaining !== null && game.settings.turnTimeLimit > 0 && (
+              <div className={`px-3 sm:px-4 py-2 rounded-lg font-bold text-sm sm:text-base shadow-lg transition-all ${
+                timeRemaining <= 10
+                  ? 'bg-gradient-to-r from-red-500 to-red-600 text-white animate-pulse'
+                  : timeRemaining <= 20
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white'
+                  : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
+              }`}>
+                ⏱️ {timeRemaining}s
+              </div>
+            )}
             
             {/* Bouton Abandonner */}
             {game.phase === 'playing' && currentPlayer && currentPlayer.isAlive && (

@@ -69,6 +69,7 @@ export interface Game {
   settings: GameSettings;
   winnerId?: string;
   playerChoices?: Record<string, 'lobby' | 'menu'>; // Choix des joueurs après la fin de partie
+  turnStartTime?: number; // Timestamp du début du tour actuel (pour le timer)
   createdAt: number;
   lastActivity: number;
 }
@@ -105,8 +106,6 @@ export const SHIPS_CONFIG: Record<ShipType, { size: number; name: string }> = {
 
 export const TURN_TIME_OPTIONS = [
   { value: 0, label: 'Illimité' },
-  { value: 30, label: '30 secondes' },
-  { value: 60, label: '1 minute' },
-  { value: 120, label: '2 minutes' },
-  { value: 300, label: '5 minutes' },
+  { value: 45, label: '45 secondes' },
+  { value: 75, label: '75 secondes' },
 ];

@@ -64,9 +64,9 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
 
     try {
       const newGame = await createGame(user.uid, user.email || 'Joueur', {
-        enableBombs: true,
-        bombsPerPlayer: 1,
-        turnTimeLimit: 60, // 1 minute
+        enableBombs: false,
+        bombsPerPlayer: 0,
+        turnTimeLimit: 0, // Illimité par défaut
         maxPlayers: 3,
       });
 

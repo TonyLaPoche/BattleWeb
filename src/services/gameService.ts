@@ -57,6 +57,8 @@ function gameFromFirestore(firestoreGame: any): Game {
       // Valeurs par défaut pour les settings manquants
       bombsPerPlayer: firestoreGame.settings?.bombsPerPlayer ?? 0,
       enableBombs: firestoreGame.settings?.enableBombs ?? false,
+      turnTimeLimit: firestoreGame.settings?.turnTimeLimit ?? 0,
+      maxPlayers: firestoreGame.settings?.maxPlayers ?? 3,
     },
     players: firestoreGame.players.map((player: any) => ({
       ...player,
@@ -67,6 +69,7 @@ function gameFromFirestore(firestoreGame: any): Game {
       // Valeur par défaut pour bombsRemaining si manquante
       bombsRemaining: player.bombsRemaining ?? 0,
     })),
+    turnStartTime: firestoreGame.turnStartTime,
   };
 }
 
@@ -309,6 +312,7 @@ export async function startGame(gameId: string, adminId: string) {
       phase: 'placement',
       status: 'active',
       currentTurn: 0,
+      turnStartTime: undefined, // Pas de timer pendant le placement
       players: updatedPlayers.map(player => ({
         ...player,
         board: {

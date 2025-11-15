@@ -135,6 +135,7 @@ function PlacementPageContent() {
         players: updatedPlayers,
         phase: allPlayersReady ? 'playing' : 'placement',
         status: allPlayersReady ? 'active' : 'active',
+        turnStartTime: allPlayersReady ? Date.now() : undefined, // Démarrer le timer si la partie commence
         lastActivity: Date.now(),
       });
 
