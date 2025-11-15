@@ -2,6 +2,7 @@ import { db, realtimeDb } from '@/lib/firebase';
 import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs, onSnapshot, deleteDoc, deleteField } from 'firebase/firestore';
 import { ref, set, get, onValue, off, push, update } from 'firebase/database';
 import { Game, Player, GameSettings, LobbyMessage, GameMove, CellState, GameBoard, Bomb, Position } from '@/types/game';
+import { saveGameToHistory, GameHistoryEntry } from '@/utils/gameHistory';
 
 // Générer un code d'invitation unique
 function generateGameCode(): string {
@@ -712,8 +713,8 @@ export async function leaveGame(gameId: string, playerId: string) {
       return;
     }
 
-    // Mettre à jour la partie
-    const updates: any = {
+    // Si la partie est en cours et qu'un joueur quitte, vérifier si la partie doit se terminer
+    let updates: any = {
       players: updatedPlayers,
       lastActivity: Date.now(),
     };
@@ -721,6 +722,16 @@ export async function leaveGame(gameId: string, playerId: string) {
     // Si l'admin quitte, donner l'admin au premier joueur restant
     if (game.adminId === playerId) {
       updates.adminId = updatedPlayers[0].id;
+    }
+
+    // Si la partie est en cours (playing) et qu'il ne reste qu'un joueur vivant, terminer la partie
+    if (game.phase === 'playing') {
+      const alivePlayers = updatedPlayers.filter(p => p.isAlive);
+      if (alivePlayers.length === 1) {
+        updates.phase = 'finished';
+        updates.status = 'finished';
+        updates.winnerId = alivePlayers[0].id;
+      }
     }
 
     await updateDoc(doc(db, 'games', gameId), updates);
@@ -744,10 +755,57 @@ export async function getActiveGamesForPlayer(playerId: string): Promise<Game[]>
     querySnapshot.forEach((docSnapshot) => {
       try {
         const game = gameFromFirestore(docSnapshot.data());
+        
         // Vérifier si le joueur est dans cette partie
-        if (game.players.some(p => p.id === playerId)) {
-          activeGames.push(game);
+        if (!game.players.some(p => p.id === playerId)) {
+          return; // Le joueur n'est pas dans cette partie
         }
+        
+        // Vérifier que la partie n'est pas réellement terminée
+        // (au cas où la phase n'aurait pas été mise à jour)
+        const alivePlayers = game.players.filter(p => p.isAlive);
+        if (alivePlayers.length <= 1 && (game.phase === 'playing' || game.phase === 'placement')) {
+          // La partie devrait être terminée mais ne l'est pas encore
+          // Marquer comme terminée et sauvegarder dans l'historique
+          const winnerId = alivePlayers.length === 1 ? alivePlayers[0].id : undefined;
+          
+          // Mettre à jour la partie pour la marquer comme terminée (asynchrone, ne pas attendre)
+          updateDoc(doc(db, 'games', game.id), {
+            phase: 'finished',
+            status: 'finished',
+            winnerId: winnerId || deleteField(),
+            lastActivity: Date.now(),
+          }).then(() => {
+            // Sauvegarder dans l'historique pour tous les joueurs
+            game.players.forEach(player => {
+              const historyEntry: GameHistoryEntry = {
+                gameId: game.id,
+                gameCode: game.code,
+                players: game.players.map(p => ({
+                  id: p.id,
+                  name: p.name,
+                  color: p.color,
+                })),
+                winnerId: winnerId,
+                winnerName: winnerId ? game.players.find(p => p.id === winnerId)?.name : undefined,
+                isWinner: player.id === winnerId,
+                finishedAt: Date.now(),
+                phase: 'finished',
+              };
+              saveGameToHistory(historyEntry);
+            });
+          }).catch(console.error);
+          
+          // Ne pas inclure dans les parties actives
+          return;
+        }
+        
+        // Vérifier que la partie n'est pas en phase 'finished'
+        if (game.phase === 'finished') {
+          return; // Ne pas inclure les parties terminées
+        }
+        
+        activeGames.push(game);
       } catch (error) {
         console.error('Erreur lors de la conversion d\'une partie:', error);
       }
@@ -763,38 +821,94 @@ export async function getActiveGamesForPlayer(playerId: string): Promise<Game[]>
   }
 }
 
-// Nettoyer les lobbies vides (appelé périodiquement)
+// Nettoyer les lobbies vides et les parties finies anciennes (appelé périodiquement)
 export async function cleanupEmptyLobbies(): Promise<void> {
   try {
     const gamesRef = collection(db, 'games');
-    const q = query(gamesRef, where('phase', '==', 'lobby'));
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(gamesRef);
     const now = Date.now();
     const THIRTY_SECONDS = 30 * 1000;
+    const ONE_HOUR = 60 * 60 * 1000; // 1 heure pour les parties finies
 
     const deletePromises: Promise<void>[] = [];
+    const updatePromises: Promise<void>[] = [];
 
     snapshot.forEach((docSnapshot) => {
-      const game = docSnapshot.data();
-      const gameId = docSnapshot.id;
-      const players = game.players || [];
-      const lastActivity = game.lastActivity || 0;
+      try {
+        const gameData = docSnapshot.data();
+        const gameId = docSnapshot.id;
+        const players = gameData.players || [];
+        const lastActivity = gameData.lastActivity || 0;
+        const phase = gameData.phase || 'lobby';
+        const game = gameFromFirestore(gameData);
 
-      // Supprimer si :
-      // 1. Le lobby n'a pas de joueurs
-      // 2. Le lobby n'a pas été actif depuis 30 secondes ET n'a pas de joueurs
-      if (
-        players.length === 0 ||
-        (lastActivity > 0 && (now - lastActivity) > THIRTY_SECONDS && players.length === 0)
-      ) {
-        deletePromises.push(deleteDoc(doc(db, 'games', gameId)));
+        // Nettoyer les lobbies vides
+        if (phase === 'lobby') {
+          // Supprimer si :
+          // 1. Le lobby n'a pas de joueurs
+          // 2. Le lobby n'a pas été actif depuis 30 secondes ET n'a pas de joueurs
+          if (
+            players.length === 0 ||
+            (lastActivity > 0 && (now - lastActivity) > THIRTY_SECONDS && players.length === 0)
+          ) {
+            deletePromises.push(deleteDoc(doc(db, 'games', gameId)));
+          }
+        }
+        
+        // Vérifier les parties en cours qui devraient être terminées
+        if (phase === 'playing' || phase === 'placement') {
+          const alivePlayers = game.players.filter(p => p.isAlive);
+          
+          // Si tous les joueurs sont morts ou il n'en reste qu'un, marquer comme terminée
+          if (alivePlayers.length <= 1) {
+            const winnerId = alivePlayers.length === 1 ? alivePlayers[0].id : undefined;
+            
+            // Mettre à jour la partie pour la marquer comme terminée
+            updatePromises.push(
+              updateDoc(doc(db, 'games', gameId), {
+                phase: 'finished',
+                status: 'finished',
+                winnerId: winnerId || deleteField(),
+                lastActivity: Date.now(),
+              }).then(() => {
+                // Sauvegarder dans l'historique pour tous les joueurs
+                game.players.forEach(player => {
+                  const historyEntry: GameHistoryEntry = {
+                    gameId: game.id,
+                    gameCode: game.code,
+                    players: game.players.map(p => ({
+                      id: p.id,
+                      name: p.name,
+                      color: p.color,
+                    })),
+                    winnerId: winnerId,
+                    winnerName: winnerId ? game.players.find(p => p.id === winnerId)?.name : undefined,
+                    isWinner: player.id === winnerId,
+                    finishedAt: Date.now(),
+                    phase: 'finished',
+                  };
+                  saveGameToHistory(historyEntry);
+                });
+              })
+            );
+          }
+        }
+        
+        // Nettoyer les parties finies anciennes (plus d'1 heure)
+        if (phase === 'finished') {
+          if (lastActivity > 0 && (now - lastActivity) > ONE_HOUR) {
+            deletePromises.push(deleteDoc(doc(db, 'games', gameId)));
+          }
+        }
+      } catch (error) {
+        console.error('Erreur lors du traitement d\'une partie:', error);
       }
     });
 
-    await Promise.all(deletePromises);
+    await Promise.all([...deletePromises, ...updatePromises]);
     
-    if (deletePromises.length > 0) {
-      console.log(`Nettoyage: ${deletePromises.length} lobby(s) vide(s) supprimé(s)`);
+    if (deletePromises.length > 0 || updatePromises.length > 0) {
+      console.log(`Nettoyage: ${deletePromises.length} partie(s) supprimée(s), ${updatePromises.length} partie(s) marquée(s) comme terminée(s)`);
     }
   } catch (error) {
     console.error('Erreur lors du nettoyage des lobbies vides:', error);
