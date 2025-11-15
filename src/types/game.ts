@@ -44,6 +44,7 @@ export interface Player {
   bombsRemaining: number; // Nombre de bombes restantes
   isAlive: boolean;
   connected: boolean;
+  skipNextTurns?: number; // Nombre de tours à sauter (pour le désamorçage de bombe)
 }
 
 export interface GameSettings {

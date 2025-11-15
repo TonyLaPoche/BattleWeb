@@ -68,6 +68,8 @@ function gameFromFirestore(firestoreGame: any): Game {
       },
       // Valeur par défaut pour bombsRemaining si manquante
       bombsRemaining: player.bombsRemaining ?? 0,
+      // Valeur par défaut pour skipNextTurns si manquante
+      skipNextTurns: player.skipNextTurns ?? 0,
     })),
     turnStartTime: firestoreGame.turnStartTime,
   };
@@ -91,6 +93,7 @@ export async function createGame(adminId: string, adminName: string, settings: G
       bombsRemaining: settings.bombsPerPlayer || 0,
       isAlive: true,
       connected: true,
+      skipNextTurns: 0,
     }],
     currentPlayerIndex: 0,
     currentTurn: 0,
@@ -152,6 +155,7 @@ export async function joinGame(code: string, playerId: string, playerName: strin
       bombsRemaining: game.settings.bombsPerPlayer || 0,
       isAlive: true,
       connected: true,
+      skipNextTurns: 0,
     };
 
     const updatedPlayers = [...game.players, newPlayer];
@@ -306,6 +310,7 @@ export async function startGame(gameId: string, adminId: string) {
     const updatedPlayers = game.players.map(player => ({
       ...player,
       bombsRemaining: game.settings.bombsPerPlayer || 0,
+      skipNextTurns: 0, // Réinitialiser les tours à sauter au début de la partie
     }));
 
     // Préparer les mises à jour (ne pas inclure turnStartTime pendant le placement)
@@ -441,7 +446,7 @@ export async function defuseBomb(gameId: string, playerId: string, bombId: strin
         })
       );
 
-      // Marquer la bombe comme désamorcée
+      // Marquer la bombe comme désamorcée et marquer le joueur qui désamorce pour sauter 2 tours
       const updatedPlayers = game.players.map(p => {
         if (p.id === bombOwner!.id) {
           return {
@@ -453,6 +458,12 @@ export async function defuseBomb(gameId: string, playerId: string, bombId: strin
               ...p.board,
               cells: updatedCells,
             },
+          };
+        } else if (p.id === playerId) {
+          // Le joueur qui désamorce doit sauter 2 tours
+          return {
+            ...p,
+            skipNextTurns: 2,
           };
         }
         return p;
@@ -612,16 +623,17 @@ export async function handleGameEnd(gameId: string, immediateReturnToLobby: bool
       await deleteDoc(doc(db, 'games', gameId));
     } else if (allChoseLobby) {
       // Retourner au lobby - réinitialiser la partie
-      const updatedPlayers = game.players.map(player => ({
-        ...player,
-        board: {
-          cells: Array(12).fill(null).map(() => Array(12).fill('empty')),
-          ships: [],
-        },
-        bombsPlaced: [],
-        bombsRemaining: game.settings.bombsPerPlayer || 0,
-        isAlive: true,
-      }));
+        const updatedPlayers = game.players.map(player => ({
+          ...player,
+          board: {
+            cells: Array(12).fill(null).map(() => Array(12).fill('empty')),
+            ships: [],
+          },
+          bombsPlaced: [],
+          bombsRemaining: game.settings.bombsPerPlayer || 0,
+          isAlive: true,
+          skipNextTurns: 0, // Réinitialiser les tours à sauter
+        }));
 
       await updateDoc(doc(db, 'games', gameId), {
         players: updatedPlayers.map(player => ({

@@ -99,6 +99,59 @@ export default function GamePage() {
       // Activer les bombes qui doivent s'activer
       if (updatedGame.phase === 'playing') {
         await activateBombs(gameId);
+        
+        // Vérifier si le joueur actuel doit être sauté (skipNextTurns > 0)
+        const currentPlayer = updatedGame.players[updatedGame.currentPlayerIndex];
+        if (currentPlayer && currentPlayer.skipNextTurns && currentPlayer.skipNextTurns > 0) {
+          // Décrémenter skipNextTurns et passer au joueur suivant
+          const updatedPlayers = updatedGame.players.map((p, index) => {
+            if (index === updatedGame.currentPlayerIndex) {
+              return {
+                ...p,
+                skipNextTurns: (p.skipNextTurns || 0) - 1,
+              };
+            }
+            return p;
+          });
+          
+          // Trouver le prochain joueur qui peut jouer
+          let nextPlayerIndex = (updatedGame.currentPlayerIndex + 1) % updatedGame.players.length;
+          let attempts = 0;
+          const maxAttempts = updatedGame.players.length * 2;
+          
+          while (attempts < maxAttempts) {
+            const nextPlayer = updatedPlayers[nextPlayerIndex];
+            
+            // Si le joueur est vivant et n'a pas de tours à sauter, c'est le bon
+            if (nextPlayer.isAlive && (!nextPlayer.skipNextTurns || nextPlayer.skipNextTurns === 0)) {
+              break;
+            }
+            
+            // Si le joueur a des tours à sauter, décrémenter le compteur
+            if (nextPlayer.skipNextTurns && nextPlayer.skipNextTurns > 0) {
+              const playerIndex = updatedPlayers.findIndex(p => p.id === nextPlayer.id);
+              if (playerIndex !== -1) {
+                updatedPlayers[playerIndex] = {
+                  ...nextPlayer,
+                  skipNextTurns: nextPlayer.skipNextTurns - 1,
+                };
+              }
+            }
+            
+            // Passer au joueur suivant
+            nextPlayerIndex = (nextPlayerIndex + 1) % updatedPlayers.length;
+            attempts++;
+          }
+          
+          await updateGame(gameId, {
+            players: updatedPlayers,
+            currentPlayerIndex: nextPlayerIndex,
+            currentTurn: (updatedGame.currentTurn || 0) + 1,
+            turnStartTime: Date.now(),
+          });
+          
+          await activateBombs(gameId);
+        }
       }
       
         // Si la partie est terminée, sauvegarder dans l'historique
@@ -161,8 +214,11 @@ export default function GamePage() {
 
   // Obtenir le joueur actuel
   const currentPlayer = game?.players.find(p => p.id === user?.uid);
-  const isCurrentTurn = game && game.players[game.currentPlayerIndex]?.id === user?.uid;
   const currentPlayerTurn = game?.players[game.currentPlayerIndex];
+  // Le joueur peut jouer seulement s'il est le joueur actuel ET qu'il n'a pas de tours à sauter
+  const isCurrentTurn = game && 
+    game.players[game.currentPlayerIndex]?.id === user?.uid &&
+    (!currentPlayerTurn?.skipNextTurns || currentPlayerTurn.skipNextTurns === 0);
   
   // Obtenir les adversaires (joueurs vivants sauf soi)
   const opponents = game?.players.filter(p => p.id !== user?.uid && p.isAlive) || [];
@@ -338,11 +394,33 @@ export default function GamePage() {
       // Déterminer le prochain joueur
       let nextPlayerIndex = game.currentPlayerIndex;
       if (!targetIsDead && alivePlayers.length > 1) {
-        // Passer au joueur suivant
-        nextPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
-        // S'assurer que le prochain joueur est vivant
-        while (!updatedPlayers[nextPlayerIndex].isAlive && nextPlayerIndex !== game.currentPlayerIndex) {
-          nextPlayerIndex = (nextPlayerIndex + 1) % game.players.length;
+        // Passer au joueur suivant en tenant compte des tours à sauter
+        let attempts = 0;
+        const maxAttempts = updatedPlayers.length * 2;
+        nextPlayerIndex = (game.currentPlayerIndex + 1) % updatedPlayers.length;
+        
+        while (attempts < maxAttempts) {
+          const nextPlayer = updatedPlayers[nextPlayerIndex];
+          
+          // Si le joueur est vivant et n'a pas de tours à sauter, c'est le bon
+          if (nextPlayer.isAlive && (!nextPlayer.skipNextTurns || nextPlayer.skipNextTurns === 0)) {
+            break;
+          }
+          
+          // Si le joueur a des tours à sauter, décrémenter le compteur
+          if (nextPlayer.skipNextTurns && nextPlayer.skipNextTurns > 0) {
+            const playerIndex = updatedPlayers.findIndex(p => p.id === nextPlayer.id);
+            if (playerIndex !== -1) {
+              updatedPlayers[playerIndex] = {
+                ...nextPlayer,
+                skipNextTurns: nextPlayer.skipNextTurns - 1,
+              };
+            }
+          }
+          
+          // Passer au joueur suivant
+          nextPlayerIndex = (nextPlayerIndex + 1) % updatedPlayers.length;
+          attempts++;
         }
       }
 
@@ -426,18 +504,57 @@ export default function GamePage() {
     try {
       await defuseBomb(game.id, user.uid, bombId);
       
-      // Passer au joueur suivant après désamorçage (perd son tour de tir)
-      const alivePlayers = game.players.filter(p => p.isAlive);
-      let nextPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+      // Recharger le jeu pour avoir les dernières données (avec skipNextTurns)
+      const updatedGame = await getGame(game.id);
+      if (!updatedGame) return;
       
-      // S'assurer que le prochain joueur est vivant
-      while (!game.players[nextPlayerIndex].isAlive && nextPlayerIndex !== game.currentPlayerIndex) {
-        nextPlayerIndex = (nextPlayerIndex + 1) % game.players.length;
+      // Passer au joueur suivant immédiatement (le joueur qui désamorce sautera 2 tours au prochain tour)
+      const alivePlayers = updatedGame.players.filter(p => p.isAlive);
+      let nextPlayerIndex = (updatedGame.currentPlayerIndex + 1) % updatedGame.players.length;
+      let attempts = 0;
+      const maxAttempts = updatedGame.players.length * 2;
+      
+      // Trouver le prochain joueur qui peut jouer (vivant et sans tours à sauter)
+      while (attempts < maxAttempts) {
+        const nextPlayer = updatedGame.players[nextPlayerIndex];
+        
+        // Si le joueur est vivant et n'a pas de tours à sauter, c'est le bon
+        if (nextPlayer.isAlive && (!nextPlayer.skipNextTurns || nextPlayer.skipNextTurns === 0)) {
+          break;
+        }
+        
+        // Si le joueur a des tours à sauter, décrémenter le compteur
+        if (nextPlayer.skipNextTurns && nextPlayer.skipNextTurns > 0) {
+          const playerIndex = updatedGame.players.findIndex(p => p.id === nextPlayer.id);
+          if (playerIndex !== -1) {
+            updatedGame.players[playerIndex] = {
+              ...nextPlayer,
+              skipNextTurns: nextPlayer.skipNextTurns - 1,
+            };
+          }
+        }
+        
+        // Passer au joueur suivant
+        nextPlayerIndex = (nextPlayerIndex + 1) % updatedGame.players.length;
+        attempts++;
       }
       
+      // Mettre à jour les joueurs avec les skipNextTurns décrémentés
+      const updatedPlayers = updatedGame.players.map(p => {
+        // Décrémenter skipNextTurns pour les joueurs qui ont des tours à sauter
+        if (p.skipNextTurns && p.skipNextTurns > 0 && p.id !== user.uid) {
+          return {
+            ...p,
+            skipNextTurns: p.skipNextTurns - 1,
+          };
+        }
+        return p;
+      });
+      
       await updateGame(game.id, {
+        players: updatedPlayers,
         currentPlayerIndex: nextPlayerIndex,
-        currentTurn: (game.currentTurn || 0) + 1,
+        currentTurn: (updatedGame.currentTurn || 0) + 1,
         turnStartTime: Date.now(), // Réinitialiser le timer pour le nouveau tour
       });
       
@@ -644,9 +761,17 @@ export default function GamePage() {
             <div className={`px-3 sm:px-5 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base shadow-lg transition-all ${
               isCurrentTurn 
                 ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse' 
+                : currentPlayerTurn?.id === user?.uid && currentPlayerTurn?.skipNextTurns && currentPlayerTurn.skipNextTurns > 0
+                ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white'
                 : 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700'
             }`}>
-              {isCurrentTurn ? '🎯 C\'est votre tour !' : `⏳ Tour de ${currentPlayerTurn?.name || '...'}`}
+              {isCurrentTurn ? (
+                '🎯 C\'est votre tour !'
+              ) : currentPlayerTurn?.id === user?.uid && currentPlayerTurn?.skipNextTurns && currentPlayerTurn.skipNextTurns > 0 ? (
+                `⏸️ Vous sautez ${currentPlayerTurn.skipNextTurns} tour${currentPlayerTurn.skipNextTurns > 1 ? 's' : ''} (désamorçage)`
+              ) : (
+                `⏳ Tour de ${currentPlayerTurn?.name || '...'}`
+              )}
             </div>
             <div className="px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 text-gray-700 font-semibold text-sm sm:text-base">
               👥 Joueurs vivants: <span className="text-blue-600">{game.players.filter(p => p.isAlive).length}/{game.players.length}</span>
