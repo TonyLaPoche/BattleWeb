@@ -3,14 +3,17 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { cleanupEmptyLobbies } from '@/services/gameService';
+import { cleanupEmptyLobbies, createGame } from '@/services/gameService';
 import { getGameHistory, GameHistoryEntry } from '@/utils/gameHistory';
+import { getUserProfile, createOrUpdateUserProfile } from '@/services/userService';
 
 export default function DashboardPage() {
   const { user, logout, isAuthenticated } = useAuth();
   const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
   const [gameHistory, setGameHistory] = useState<GameHistoryEntry[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [playerName, setPlayerName] = useState<string>('');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -21,11 +24,54 @@ export default function DashboardPage() {
       
       // Nettoyer les lobbies vides au chargement
       cleanupEmptyLobbies().catch(console.error);
+      
+      // Charger le nom d'utilisateur
+      const loadPlayerName = async () => {
+        if (!user?.uid || !user?.email) return;
+        
+        try {
+          let profile = await getUserProfile(user.uid);
+          if (!profile) {
+            profile = await createOrUpdateUserProfile(user.uid, user.email);
+          }
+          if (profile) {
+            setPlayerName(profile.username);
+          } else {
+            setPlayerName(user.email.split('@')[0]);
+          }
+        } catch (error) {
+          console.error('Erreur lors du chargement du profil:', error);
+          setPlayerName(user.email?.split('@')[0] || 'Joueur');
+        }
+      };
+      
+      loadPlayerName();
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, user]);
 
-  const handleCreateGame = () => {
-    router.push('/lobby');
+  const handleCreateGame = async () => {
+    if (!user || !playerName) {
+      // Attendre que le nom soit chargé
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const newGame = await createGame(user.uid, playerName, {
+        enableBombs: false,
+        bombsPerPlayer: 0,
+        turnTimeLimit: 0, // Illimité par défaut
+        maxPlayers: 3,
+      });
+
+      // Rediriger vers le lobby avec le gameId
+      router.push(`/lobby?gameId=${newGame.id}`);
+    } catch (error) {
+      console.error('Erreur lors de la création de la partie:', error);
+      alert('Erreur lors de la création de la partie. Veuillez réessayer.');
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleJoinGame = () => {
@@ -94,9 +140,10 @@ export default function DashboardPage() {
                 </p>
                 <button
                   onClick={handleCreateGame}
-                  className="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                  disabled={creating || !playerName}
+                  className="w-full bg-blue-500 hover:bg-blue-700 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded transition-colors"
                 >
-                  Créer une partie
+                  {creating ? 'Création...' : 'Créer une partie'}
                 </button>
               </div>
             </div>
