@@ -451,6 +451,7 @@ export async function defuseBomb(gameId: string, playerId: string, bombId: strin
       );
 
       // Marquer la bombe comme désamorcée et marquer le joueur qui désamorce pour sauter 2 tours
+      // Le propriétaire de la bombe reçoit 2 tours bonus pour jouer deux fois
       const updatedPlayers = game.players.map(p => {
         if (p.id === bombOwner!.id) {
           return {
@@ -462,6 +463,7 @@ export async function defuseBomb(gameId: string, playerId: string, bombId: strin
               ...p.board,
               cells: updatedCells,
             },
+            bonusTurns: 2, // Le propriétaire peut jouer 2 fois
           };
         } else if (p.id === playerId) {
           // Le joueur qui désamorce doit sauter 2 tours

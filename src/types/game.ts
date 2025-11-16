@@ -45,6 +45,7 @@ export interface Player {
   isAlive: boolean;
   connected: boolean;
   skipNextTurns?: number; // Nombre de tours à sauter (pour le désamorçage de bombe)
+  bonusTurns?: number; // Nombre de tours bonus à jouer (quand une bombe est désamorcée)
 }
 
 export interface GameSettings {
