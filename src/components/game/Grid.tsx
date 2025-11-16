@@ -45,8 +45,9 @@ export const Grid = ({
 
   const getCellCursor = (state: CellState): string => {
     if (!onCellClick) return 'cursor-default';
-    // Si la case a déjà été tirée ou révélée, pas de curseur pointer
-    if (state === 'hit' || state === 'miss' || state === 'revealed' || state === 'revealed_ship' || state === 'revealed_empty') {
+    // Si la case a déjà été tirée ou révélée vide, pas de curseur pointer
+    // MAIS on peut cliquer sur revealed_ship car il y a un navire à détruire
+    if (state === 'hit' || state === 'miss' || state === 'revealed' || state === 'revealed_empty') {
       return 'cursor-not-allowed';
     }
     return 'cursor-pointer';
@@ -137,7 +138,7 @@ export const Grid = ({
                     handleCellClick(x, y);
                   }
                 }}
-                disabled={!onCellClick || cell === 'hit' || cell === 'miss' || cell === 'revealed' || cell === 'revealed_ship' || cell === 'revealed_empty'}
+                disabled={!onCellClick || cell === 'hit' || cell === 'miss' || cell === 'revealed' || cell === 'revealed_empty'}
                 title={showCoordinates ? `${String.fromCharCode(65 + x)}${y + 1}` : undefined}
               />
             ))}

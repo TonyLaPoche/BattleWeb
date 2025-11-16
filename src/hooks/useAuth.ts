@@ -8,6 +8,13 @@ export const useAuth = () => {
   const { user, loading, setUser, setLoading } = useAuthStore();
 
   useEffect(() => {
+    // Vérifier que auth est initialisé
+    if (!auth) {
+      console.error('Firebase Auth n\'est pas initialisé. Vérifiez vos variables d\'environnement.');
+      setLoading(false);
+      return;
+    }
+
     // Timeout de sécurité pour éviter le chargement infini
     const timeout = setTimeout(() => {
       setLoading(false);
@@ -27,6 +34,10 @@ export const useAuth = () => {
 
   const login = async (email: string, password: string) => {
     try {
+      if (!auth) {
+        throw new Error('Firebase Auth n\'est pas initialisé. Vérifiez vos variables d\'environnement.');
+      }
+      
       // Validation basique
       if (!email || !email.includes('@')) {
         throw new Error('Email invalide');
@@ -45,6 +56,10 @@ export const useAuth = () => {
 
   const register = async (email: string, password: string) => {
     try {
+      if (!auth) {
+        throw new Error('Firebase Auth n\'est pas initialisé. Vérifiez vos variables d\'environnement.');
+      }
+      
       // Validation basique
       if (!email || !email.includes('@')) {
         throw new Error('Email invalide');

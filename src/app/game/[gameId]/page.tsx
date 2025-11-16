@@ -236,31 +236,17 @@ export default function GamePage() {
           }
         }
         
-        // Si la partie est terminée, gérer les choix
+        // Si la partie est terminée, vérifier si le joueur a déjà fait un choix
         if (updatedGame.phase === 'finished') {
-          // Vérifier si le joueur a déjà fait un choix
           const choices = updatedGame.playerChoices || {};
           if (user && choices[user.uid]) {
             setPlayerChoiceState(choices[user.uid]);
           }
-          
-          // Gérer la fin de partie (seulement si tous les joueurs ont choisi)
-          const allPlayersChose = updatedGame.players.every(p => choices[p.id] !== undefined);
-          if (allPlayersChose) {
-            await handleGameEnd(gameId);
-            
-            // Vérifier le résultat après gestion
-            setTimeout(async () => {
-              const updatedGameAfter = await getGame(gameId);
-              if (!updatedGameAfter) {
-                // Lobby supprimé
-                router.push('/dashboard');
-              } else if (updatedGameAfter.phase === 'lobby') {
-                // Retour au lobby
-                router.push(`/lobby?gameId=${gameId}`);
-              }
-            }, 1000);
-          }
+        }
+        
+        // Si le jeu est retourné au lobby, rediriger
+        if (updatedGame.phase === 'lobby' && game?.phase === 'finished') {
+          router.push(`/lobby?gameId=${gameId}`);
         }
     });
 
@@ -283,7 +269,12 @@ export default function GamePage() {
   // Réinitialiser le tir et la sélection quand le tour change
   useEffect(() => {
     if (game && isCurrentTurn) {
-      setHasShotThisTurn(false);
+      const currentPlayer = game.players.find(p => p.id === user?.uid);
+      // Réinitialiser hasShotThisTurn seulement si on n'a pas de tours bonus
+      // (les tours bonus sont gérés dans handleCellClick)
+      if (!currentPlayer?.bonusTurns || currentPlayer.bonusTurns === 0) {
+        setHasShotThisTurn(false);
+      }
       setActionMode('shot');
       
       // Si un seul adversaire, le sélectionner automatiquement
@@ -358,15 +349,13 @@ export default function GamePage() {
         });
       } else {
         // Passer au joueur suivant normalement
-        const alivePlayers = game.players.filter(p => p.isAlive);
         let nextPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
-        
-        // S'assurer que le prochain joueur est vivant et peut jouer
         let attempts = 0;
         const maxAttempts = game.players.length * 2;
+        const updatedPlayers = game.players.map(p => ({ ...p }));
         
         while (attempts < maxAttempts) {
-          const nextPlayer = game.players[nextPlayerIndex];
+          const nextPlayer = updatedPlayers[nextPlayerIndex];
           
           if (nextPlayer.isAlive && (!nextPlayer.skipNextTurns || nextPlayer.skipNextTurns === 0)) {
             break;
@@ -374,21 +363,18 @@ export default function GamePage() {
           
           // Si le joueur a des tours à sauter, décrémenter le compteur
           if (nextPlayer.skipNextTurns && nextPlayer.skipNextTurns > 0) {
-            const playerIndex = game.players.findIndex(p => p.id === nextPlayer.id);
-            if (playerIndex !== -1) {
-              game.players[playerIndex] = {
-                ...nextPlayer,
-                skipNextTurns: nextPlayer.skipNextTurns - 1,
-              };
-            }
+            updatedPlayers[nextPlayerIndex] = {
+              ...nextPlayer,
+              skipNextTurns: nextPlayer.skipNextTurns - 1,
+            };
           }
           
-          nextPlayerIndex = (nextPlayerIndex + 1) % game.players.length;
+          nextPlayerIndex = (nextPlayerIndex + 1) % updatedPlayers.length;
           attempts++;
         }
 
         await updateGame(game.id, {
-          players: game.players,
+          players: updatedPlayers,
           currentPlayerIndex: nextPlayerIndex,
           currentTurn: game.currentTurn + 1,
           turnStartTime: Date.now(),
@@ -435,8 +421,11 @@ export default function GamePage() {
     if (!targetPlayer || targetPlayer.id === user.uid || !targetPlayer.isAlive) return;
 
     const cellState = targetPlayer.board.cells[y]?.[x];
-    if (cellState === 'hit' || cellState === 'miss' || cellState === 'revealed') {
-      return; // Case déjà tirée
+    // On ne peut pas tirer sur les cases déjà tirées (hit, miss)
+    // On ne peut pas tirer sur les cases révélées vides (revealed_empty) car c'est un gaspillage de tir
+    // MAIS on peut tirer sur les cases révélées avec navire (revealed_ship) car il y a un navire à détruire
+    if (cellState === 'hit' || cellState === 'miss' || cellState === 'revealed' || cellState === 'revealed_empty') {
+      return; // Case déjà tirée ou révélée vide
     }
 
     try {
@@ -493,21 +482,76 @@ export default function GamePage() {
 
       // Déterminer le prochain joueur
       let nextPlayerIndex = game.currentPlayerIndex;
+      let hasRemainingBonusTurns = false;
+      let shouldIncrementTurn = true; // Par défaut, on incrémente le tour
+      
       if (!targetIsDead && alivePlayers.length > 1) {
         // Vérifier si le joueur actuel a des tours bonus à jouer
         const currentPlayer = updatedPlayers.find(p => p.id === user.uid);
+        
         if (currentPlayer && currentPlayer.bonusTurns && currentPlayer.bonusTurns > 0) {
           // Le joueur a encore des tours bonus, il rejoue
           // Décrémenter le compteur de tours bonus
           const playerIndex = updatedPlayers.findIndex(p => p.id === user.uid);
           if (playerIndex !== -1) {
+            const remainingBonusTurns = currentPlayer.bonusTurns - 1;
+            console.log('  - [BONUS TURNS] Avant décrémentation:', currentPlayer.bonusTurns);
+            console.log('  - [BONUS TURNS] Après décrémentation:', remainingBonusTurns);
+            
             updatedPlayers[playerIndex] = {
               ...currentPlayer,
-              bonusTurns: currentPlayer.bonusTurns - 1,
+              bonusTurns: remainingBonusTurns,
             };
+            // Vérifier s'il reste encore des tours bonus après la décrémentation
+            hasRemainingBonusTurns = remainingBonusTurns > 0;
+            
+            // Si après la décrémentation, il n'y a plus de tours bonus, passer au joueur suivant
+            if (remainingBonusTurns === 0) {
+              // Passer au joueur suivant en tenant compte des tours à sauter
+              let attempts = 0;
+              const maxAttempts = updatedPlayers.length * 2;
+              nextPlayerIndex = (game.currentPlayerIndex + 1) % updatedPlayers.length;
+              
+              while (attempts < maxAttempts) {
+                const nextPlayer = updatedPlayers[nextPlayerIndex];
+                
+                // Ne pas revenir au joueur actuel (celui qui vient de finir ses tours bonus)
+                if (nextPlayerIndex === game.currentPlayerIndex) {
+                  nextPlayerIndex = (nextPlayerIndex + 1) % updatedPlayers.length;
+                  attempts++;
+                  continue;
+                }
+                
+                // Si le joueur est vivant et n'a pas de tours à sauter, c'est le bon
+                if (nextPlayer.isAlive && (!nextPlayer.skipNextTurns || nextPlayer.skipNextTurns === 0)) {
+                  break;
+                }
+                
+                // Si le joueur a des tours à sauter, décrémenter le compteur
+                if (nextPlayer.skipNextTurns && nextPlayer.skipNextTurns > 0) {
+                  const playerIdx = updatedPlayers.findIndex(p => p.id === nextPlayer.id);
+                  if (playerIdx !== -1) {
+                    updatedPlayers[playerIdx] = {
+                      ...nextPlayer,
+                      skipNextTurns: nextPlayer.skipNextTurns - 1,
+                    };
+                  }
+                }
+                
+                // Passer au joueur suivant
+                nextPlayerIndex = (nextPlayerIndex + 1) % updatedPlayers.length;
+                attempts++;
+              }
+              
+              // Incrémenter currentTurn car on passe au joueur suivant
+              shouldIncrementTurn = true;
+            } else {
+              // Le joueur reste le joueur actuel
+              nextPlayerIndex = game.currentPlayerIndex;
+              // Ne pas incrémenter currentTurn car c'est encore le tour du même joueur (tour bonus)
+              shouldIncrementTurn = false;
+            }
           }
-          // Le joueur reste le joueur actuel
-          nextPlayerIndex = game.currentPlayerIndex;
         } else {
           // Passer au joueur suivant en tenant compte des tours à sauter
           let attempts = 0;
@@ -537,16 +581,19 @@ export default function GamePage() {
             nextPlayerIndex = (nextPlayerIndex + 1) % updatedPlayers.length;
             attempts++;
           }
+          // Incrémenter currentTurn car on passe au joueur suivant
+          shouldIncrementTurn = true;
         }
       }
 
       const winnerId = alivePlayers.length === 1 ? alivePlayers[0].id : undefined;
 
       // Préparer les mises à jour
+      const newCurrentTurn = winnerId ? game.currentTurn : (shouldIncrementTurn ? game.currentTurn + 1 : game.currentTurn);
       const gameUpdates: any = {
         players: updatedPlayers,
         currentPlayerIndex: winnerId ? game.currentPlayerIndex : nextPlayerIndex,
-        currentTurn: winnerId ? game.currentTurn : game.currentTurn + 1,
+        currentTurn: newCurrentTurn,
         phase: winnerId ? 'finished' : 'playing',
         status: winnerId ? 'finished' : 'active',
       };
@@ -562,8 +609,16 @@ export default function GamePage() {
       // Mettre à jour la partie
       await updateGame(game.id, gameUpdates);
       
-      // Marquer qu'on a tiré ce tour
-      setHasShotThisTurn(true);
+      // Si le joueur a encore des tours bonus après ce tir, réinitialiser hasShotThisTurn pour qu'il puisse rejouer
+      // Sinon, marquer qu'on a tiré ce tour
+      if (hasRemainingBonusTurns) {
+        // Il reste encore des tours bonus, réinitialiser pour le prochain tour bonus
+        setHasShotThisTurn(false);
+      } else {
+        // Dernier tour bonus ou pas de tours bonus, marquer comme terminé
+        setHasShotThisTurn(true);
+      }
+      
       setSelectedTarget(null);
       
       // Activer les bombes après le changement de tour
@@ -590,11 +645,12 @@ export default function GamePage() {
     try {
       await placeBomb(game.id, user.uid, opponentId, { x, y });
       
-      // Passer au joueur suivant après placement (le tour actuel continue)
+      // Passer au joueur suivant après placement (placer une bombe termine le tour)
       const nextPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
       await updateGame(game.id, {
         currentPlayerIndex: nextPlayerIndex,
-        // Ne pas incrémenter currentTurn ici, seulement après un tir
+        currentTurn: game.currentTurn + 1, // Incrémenter le tour car placer une bombe est une action qui termine le tour
+        turnStartTime: Date.now(), // Réinitialiser le timer pour le nouveau tour
       });
       
       // Activer les bombes
@@ -650,39 +706,44 @@ export default function GamePage() {
       const bombOwner = updatedGame.players[bombOwnerIndex];
       if (!bombOwner.isAlive) {
         // Si le propriétaire est mort, trouver le prochain joueur qui peut jouer
+        // (en tenant compte des skipNextTurns du joueur qui a désamorcé)
         let nextPlayerIndex = (updatedGame.currentPlayerIndex + 1) % updatedGame.players.length;
         let attempts = 0;
         const maxAttempts = updatedGame.players.length * 2;
+        const updatedPlayers = [...updatedGame.players];
         
         while (attempts < maxAttempts) {
-          const nextPlayer = updatedGame.players[nextPlayerIndex];
+          const nextPlayer = updatedPlayers[nextPlayerIndex];
           
           if (nextPlayer.isAlive && (!nextPlayer.skipNextTurns || nextPlayer.skipNextTurns === 0)) {
             break;
           }
           
+          // Si le joueur a des tours à sauter, décrémenter le compteur
           if (nextPlayer.skipNextTurns && nextPlayer.skipNextTurns > 0) {
-            const playerIndex = updatedGame.players.findIndex(p => p.id === nextPlayer.id);
+            const playerIndex = updatedPlayers.findIndex(p => p.id === nextPlayer.id);
             if (playerIndex !== -1) {
-              updatedGame.players[playerIndex] = {
+              updatedPlayers[playerIndex] = {
                 ...nextPlayer,
                 skipNextTurns: nextPlayer.skipNextTurns - 1,
               };
             }
           }
           
-          nextPlayerIndex = (nextPlayerIndex + 1) % updatedGame.players.length;
+          nextPlayerIndex = (nextPlayerIndex + 1) % updatedPlayers.length;
           attempts++;
         }
         
         await updateGame(game.id, {
-          players: updatedGame.players,
+          players: updatedPlayers,
           currentPlayerIndex: nextPlayerIndex,
           currentTurn: (updatedGame.currentTurn || 0) + 1,
           turnStartTime: Date.now(),
         });
       } else {
         // Donner le tour au propriétaire de la bombe pour qu'il puisse jouer deux fois
+        // Le joueur qui a désamorcé a skipNextTurns: 2, donc il sautera automatiquement
+        // les 2 prochains tours où c'est son tour (géré par subscribeToGame)
         await updateGame(game.id, {
           currentPlayerIndex: bombOwnerIndex,
           currentTurn: (updatedGame.currentTurn || 0) + 1,
@@ -753,29 +814,32 @@ export default function GamePage() {
       setPlayerChoiceState(choice);
       await setPlayerChoice(game.id, user.uid, choice);
       
-      // Si choix "lobby", retourner immédiatement sans attendre les autres
+      // Si choix "lobby", retourner immédiatement au lobby sans attendre les autres
       if (choice === 'lobby') {
         await handleGameEnd(game.id, true); // true = retour immédiat
-        router.push(`/lobby?gameId=${game.id}`);
+        // La redirection sera gérée par le subscribeToGame qui détecte le changement de phase
         return;
       }
       
-      // Si choix "menu", attendre que tous les joueurs choisissent
-      setTimeout(async () => {
-        await handleGameEnd(game.id);
-        const updatedGame = await getGame(game.id);
+      // Si choix "menu", quitter immédiatement vers le dashboard
+      if (choice === 'menu') {
+        // Vérifier si tous les joueurs ont choisi menu (suppression du lobby)
+        const choices = game.playerChoices || {};
+        choices[user.uid] = 'menu';
+        const allChoseMenu = game.players.every(p => choices[p.id] === 'menu');
         
-        if (!updatedGame) {
-          // Lobby supprimé, retourner au menu
-          router.push('/dashboard');
-        } else if (updatedGame.phase === 'lobby') {
-          // Retour au lobby
-          router.push(`/lobby?gameId=${game.id}`);
+        if (allChoseMenu) {
+          // Tous ont choisi menu, supprimer le lobby
+          await handleGameEnd(game.id);
         }
-      }, 500);
+        
+        // Quitter vers le dashboard
+        router.push('/dashboard');
+        return;
+      }
     } catch (error: any) {
       console.error('Erreur lors du choix:', error);
-      setError(error.message || 'Erreur lors du choix');
+      setError(error.message || 'Erreur lors de l\'enregistrement du choix');
     }
   };
 
@@ -796,10 +860,17 @@ export default function GamePage() {
   const isWinner = winner?.id === user?.uid;
   const choices = game.playerChoices || {};
   const hasChosen = user ? choices[user.uid] !== undefined : false;
-  const otherPlayerChoice = game.players
+  
+  // Obtenir les choix de tous les autres joueurs
+  const otherPlayersChoices = game.players
     .filter(p => p.id !== user?.uid)
-    .map(p => choices[p.id])
-    .find(c => c !== undefined);
+    .map(p => ({
+      player: p,
+      choice: choices[p.id],
+    }));
+  
+  // Vérifier si le jeu est retourné au lobby
+  const isBackToLobby = game.phase === 'lobby';
 
   // Créer une grille masquée pour l'adversaire (ne montre pas les navires, seulement les tirs)
   const getOpponentGrid = (opponent: Player): CellState[][] => {
@@ -860,21 +931,70 @@ export default function GamePage() {
                     <p className="text-gray-700 font-semibold">
                       Vous avez choisi : <span className="text-blue-600 font-bold">{playerChoice === 'lobby' ? '🏠 Lobby' : '🏡 Menu'}</span>
                     </p>
-                  </div>
-                  {otherPlayerChoice && (
-                    <div className="p-4 bg-green-50 rounded-lg border-2 border-green-200">
-                      <p className="text-gray-700 font-semibold">
-                        L'autre joueur a choisi : <span className="text-green-600 font-bold">{otherPlayerChoice === 'lobby' ? '🏠 Lobby' : '🏡 Menu'}</span>
+                    {playerChoice === 'lobby' && (
+                      <p className="text-sm text-gray-600 mt-2">
+                        Vous êtes retourné au lobby. L'autre joueur peut vous y rejoindre.
                       </p>
+                    )}
+                    {playerChoice === 'menu' && (
+                      <p className="text-sm text-gray-600 mt-2">
+                        Vous avez quitté la partie.
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Afficher l'état des autres joueurs */}
+                  {otherPlayersChoices.length > 0 && (
+                    <div className="space-y-2">
+                      {otherPlayersChoices.map(({ player, choice }) => (
+                        <div
+                          key={player.id}
+                          className={`p-4 rounded-lg border-2 ${
+                            choice === 'lobby'
+                              ? 'bg-green-50 border-green-200'
+                              : choice === 'menu'
+                              ? 'bg-red-50 border-red-200'
+                              : 'bg-yellow-50 border-yellow-200'
+                          }`}
+                        >
+                          <p className="text-gray-700 font-semibold flex items-center">
+                            <span className="font-bold mr-2" style={{ color: player.color }}>
+                              {player.name}
+                            </span>
+                            {choice === 'lobby' && (
+                              <>
+                                <span className="text-green-600 font-bold">🏠 Retourné au lobby</span>
+                                {playerChoice === 'lobby' && (
+                                  <span className="ml-2 text-sm text-green-600">(Vous pouvez le rejoindre)</span>
+                                )}
+                              </>
+                            )}
+                            {choice === 'menu' && (
+                              <span className="text-red-600 font-bold">🏡 A quitté la partie</span>
+                            )}
+                            {!choice && (
+                              <>
+                                <span className="animate-spin mr-2">⏳</span>
+                                <span className="text-yellow-600">En attente de son choix...</span>
+                              </>
+                            )}
+                          </p>
+                        </div>
+                      ))}
                     </div>
                   )}
-                  {!otherPlayerChoice && (
-                    <div className="p-4 bg-yellow-50 rounded-lg border-2 border-yellow-200">
-                      <p className="text-gray-700 font-semibold flex items-center justify-center">
-                        <span className="animate-spin mr-2">⏳</span>
-                        En attente du choix de l'autre joueur...
-                      </p>
-                    </div>
+                  
+                  {/* Si le joueur a choisi menu mais que l'autre est au lobby, proposer de le rejoindre */}
+                  {playerChoice === 'menu' && otherPlayersChoices.some(({ choice }) => choice === 'lobby') && (
+                    <button
+                      onClick={() => {
+                        setPlayerChoiceState('lobby');
+                        handleEndGameChoice('lobby');
+                      }}
+                      className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95"
+                    >
+                      🏠 Rejoindre le lobby
+                    </button>
                   )}
                 </div>
               )}

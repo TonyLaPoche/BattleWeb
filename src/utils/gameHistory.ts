@@ -20,8 +20,16 @@ export function saveGameToHistory(entry: GameHistoryEntry): void {
   try {
     const history = getGameHistory();
     
-    // Ajouter la nouvelle entrée au début
-    history.unshift(entry);
+    // Vérifier si une entrée avec le même gameId existe déjà
+    const existingIndex = history.findIndex(e => e.gameId === entry.gameId);
+    
+    if (existingIndex !== -1) {
+      // Remplacer l'ancienne entrée par la nouvelle (plus récente)
+      history[existingIndex] = entry;
+    } else {
+      // Ajouter la nouvelle entrée au début
+      history.unshift(entry);
+    }
     
     // Limiter à MAX_HISTORY_ENTRIES
     if (history.length > MAX_HISTORY_ENTRIES) {
@@ -40,7 +48,24 @@ export function getGameHistory(): GameHistoryEntry[] {
     const stored = localStorage.getItem(HISTORY_KEY);
     if (!stored) return [];
     
-    return JSON.parse(stored) as GameHistoryEntry[];
+    const history = JSON.parse(stored) as GameHistoryEntry[];
+    
+    // Nettoyer les doublons (garder la première occurrence de chaque gameId)
+    const seen = new Set<string>();
+    const cleanedHistory = history.filter(entry => {
+      if (seen.has(entry.gameId)) {
+        return false; // Doublon, on l'ignore
+      }
+      seen.add(entry.gameId);
+      return true;
+    });
+    
+    // Si on a trouvé des doublons, sauvegarder la version nettoyée
+    if (cleanedHistory.length !== history.length) {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(cleanedHistory));
+    }
+    
+    return cleanedHistory;
   } catch (error) {
     console.error('Erreur lors de la récupération de l\'historique:', error);
     return [];

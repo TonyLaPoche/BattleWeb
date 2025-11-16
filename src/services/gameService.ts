@@ -136,9 +136,11 @@ export async function joinGame(code: string, playerId: string, playerName: strin
       throw new Error('Partie complète');
     }
 
-    // Vérifier si le joueur n'est pas déjà dans la partie
-    if (game.players.some(p => p.id === playerId)) {
-      throw new Error('Vous êtes déjà dans cette partie');
+    // Vérifier si le joueur est déjà dans la partie
+    const existingPlayer = game.players.find(p => p.id === playerId);
+    if (existingPlayer) {
+      // Si le joueur est déjà dans la partie, retourner la partie (cas où il rafraîchit la page)
+      return game;
     }
 
     // Générer une couleur unique
@@ -369,18 +371,77 @@ export async function placeBomb(
     const game = await getGame(gameId);
     if (!game) throw new Error('Partie non trouvée');
 
+    // Vérifications de sécurité
+    if (game.phase !== 'playing') {
+      throw new Error('La partie n\'est pas en cours');
+    }
+
     const player = game.players.find(p => p.id === playerId);
     if (!player) throw new Error('Joueur non trouvé');
 
+    // Vérifier que c'est le tour du joueur
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (currentPlayer.id !== playerId) {
+      throw new Error('Ce n\'est pas votre tour');
+    }
+
+    // Vérifier que le joueur n'a pas de tours à sauter
+    if (player.skipNextTurns && player.skipNextTurns > 0) {
+      throw new Error('Vous devez sauter ce tour');
+    }
+
+    // Vérifier que le joueur est vivant
+    if (!player.isAlive) {
+      throw new Error('Vous ne pouvez pas placer de bombe si vous êtes éliminé');
+    }
+
+    // Vérifier les bombes disponibles
     if (player.bombsRemaining <= 0) {
       throw new Error('Vous n\'avez plus de bombes disponibles');
     }
 
+    // Vérifier que les bombes sont activées
     if (!game.settings.enableBombs || game.settings.bombsPerPlayer === 0) {
       throw new Error('Les bombes ne sont pas activées dans cette partie');
     }
 
+    // Vérifier que la position est valide
+    if (position.x < 0 || position.x >= 12 || position.y < 0 || position.y >= 12) {
+      throw new Error('Position invalide');
+    }
+
+    // Vérifier que le joueur cible existe et est vivant
+    const targetPlayer = game.players.find(p => p.id === targetPlayerId);
+    if (!targetPlayer) {
+      throw new Error('Joueur cible non trouvé');
+    }
+    if (targetPlayer.id === playerId) {
+      throw new Error('Vous ne pouvez pas vous attaquer vous-même');
+    }
+    if (!targetPlayer.isAlive) {
+      throw new Error('Vous ne pouvez pas placer de bombe sur un joueur éliminé');
+    }
+
+    // Vérifier qu'il n'y a pas déjà une bombe à cette position sur cette grille
+    const existingBomb = game.players
+      .flatMap(p => p.bombsPlaced)
+      .find(b => 
+        b.targetPlayerId === targetPlayerId && 
+        b.position.x === position.x && 
+        b.position.y === position.y &&
+        !b.detonated &&
+        !b.defused
+      );
+    if (existingBomb) {
+      throw new Error('Une bombe existe déjà à cette position');
+    }
+
     // Créer la bombe
+    // Note: activatesAtTurn est calculé avec currentTurn + 2 car :
+    // - La bombe est placée au tour N
+    // - currentTurn sera incrémenté à N+1 juste après le placement
+    // - Donc activatesAtTurn = N + 2 signifie que la bombe s'activera 2 tours après le placement
+    //   (au tour N+2, après que currentTurn soit passé de N à N+1 puis à N+2)
     const bomb: Bomb = {
       id: `bomb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       position,
@@ -418,21 +479,77 @@ export async function defuseBomb(gameId: string, playerId: string, bombId: strin
     const game = await getGame(gameId);
     if (!game) throw new Error('Partie non trouvée');
 
+    // Vérifications de sécurité
+    if (game.phase !== 'playing') {
+      throw new Error('La partie n\'est pas en cours');
+    }
+
+    const player = game.players.find(p => p.id === playerId);
+    if (!player) throw new Error('Joueur non trouvé');
+
+    // Vérifier que c'est le tour du joueur
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (currentPlayer.id !== playerId) {
+      throw new Error('Ce n\'est pas votre tour');
+    }
+
+    // Vérifier que le joueur n'a pas de tours à sauter
+    if (player.skipNextTurns && player.skipNextTurns > 0) {
+      throw new Error('Vous devez sauter ce tour');
+    }
+
+    // Vérifier que le joueur est vivant
+    if (!player.isAlive) {
+      throw new Error('Vous ne pouvez pas désamorcer de bombe si vous êtes éliminé');
+    }
+
     // Trouver la bombe
     let targetBomb: Bomb | null = null;
     let bombOwner: Player | null = null;
 
     for (const player of game.players) {
       const bomb = player.bombsPlaced.find(b => b.id === bombId && b.targetPlayerId === playerId);
-      if (bomb && !bomb.detonated && !bomb.defused) {
-        targetBomb = bomb;
-        bombOwner = player;
-        break;
+      // Permettre le désamorçage dès que le joueur reçoit la bombe (tour suivant le placement)
+      // Le joueur peut désamorcer dès que c'est son tour et que la bombe a été placée
+      // (pas besoin d'attendre le tour d'activation)
+      if (bomb && !bomb.defused) {
+        // Le joueur peut désamorcer dès le tour suivant le placement
+        // (placedAtTurn + 1) ou au tour d'activation ou après
+        // Cela permet au joueur de désamorcer dès qu'il reçoit la bombe
+        if (game.currentTurn >= bomb.placedAtTurn + 1) {
+          targetBomb = bomb;
+          bombOwner = player;
+          break;
+        }
       }
     }
 
     if (!targetBomb || !bombOwner) {
-      throw new Error('Bombe non trouvée ou déjà désamorcée/activée');
+      // Vérifier si la bombe existe mais n'est pas encore prête
+      const bombExists = game.players.some(p => 
+        p.bombsPlaced.some(b => b.id === bombId && b.targetPlayerId === playerId && !b.defused)
+      );
+      if (bombExists) {
+        // Trouver la bombe pour donner plus d'infos sur le problème
+        let foundBomb: Bomb | null = null;
+        for (const player of game.players) {
+          const bomb = player.bombsPlaced.find(b => b.id === bombId && b.targetPlayerId === playerId && !b.defused);
+          if (bomb) {
+            foundBomb = bomb;
+            break;
+          }
+        }
+        if (foundBomb) {
+          throw new Error(`La bombe n'est pas encore prête à être désamorcée (tour actuel: ${game.currentTurn}, tour de placement: ${foundBomb.placedAtTurn}, tour d'activation: ${foundBomb.activatesAtTurn})`);
+        }
+        throw new Error('La bombe n\'est pas encore prête à être désamorcée');
+      }
+      throw new Error('Bombe non trouvée ou déjà désamorcée');
+    }
+
+    // Vérifier que le propriétaire de la bombe existe toujours
+    if (!bombOwner.isAlive) {
+      throw new Error('Le propriétaire de la bombe a été éliminé');
     }
 
     // Révéler la zone sur la grille de l'envoyeur (effet miroir)
@@ -454,6 +571,8 @@ export async function defuseBomb(gameId: string, playerId: string, bombId: strin
       // Le propriétaire de la bombe reçoit 2 tours bonus pour jouer deux fois
       const updatedPlayers = game.players.map(p => {
         if (p.id === bombOwner!.id) {
+          // Vérifier que le propriétaire n'a pas déjà des tours bonus (éviter les accumulations)
+          const existingBonusTurns = p.bonusTurns || 0;
           return {
             ...p,
             bombsPlaced: p.bombsPlaced.map(b =>
@@ -463,13 +582,15 @@ export async function defuseBomb(gameId: string, playerId: string, bombId: strin
               ...p.board,
               cells: updatedCells,
             },
-            bonusTurns: 2, // Le propriétaire peut jouer 2 fois
+            bonusTurns: Math.max(2, existingBonusTurns), // Ne pas réduire si déjà supérieur
           };
         } else if (p.id === playerId) {
           // Le joueur qui désamorce doit sauter 2 tours
+          // Vérifier qu'il n'a pas déjà des tours à sauter (éviter les accumulations)
+          const existingSkipTurns = p.skipNextTurns || 0;
           return {
             ...p,
-            skipNextTurns: 2,
+            skipNextTurns: Math.max(2, existingSkipTurns), // Ne pas réduire si déjà supérieur
           };
         }
         return p;
@@ -491,6 +612,7 @@ export async function activateBombs(gameId: string): Promise<void> {
 
     // Trouver toutes les bombes à activer
     const bombsToActivate: Array<{ bomb: Bomb; targetPlayerId: string }> = [];
+    const currentPlayer = game.players[game.currentPlayerIndex];
     
     for (const player of game.players) {
       for (const bomb of player.bombsPlaced) {
@@ -499,7 +621,13 @@ export async function activateBombs(gameId: string): Promise<void> {
           !bomb.defused &&
           game.currentTurn >= bomb.activatesAtTurn
         ) {
-          bombsToActivate.push({ bomb, targetPlayerId: bomb.targetPlayerId });
+          // Ne pas activer immédiatement si c'est le tour du joueur cible
+          // Le joueur doit avoir la possibilité de désamorcer avant que la bombe n'explose
+          // On active seulement si ce n'est PAS le tour du joueur cible
+          // OU si le tour d'activation est dépassé (currentTurn > activatesAtTurn)
+          if (bomb.targetPlayerId !== currentPlayer.id || game.currentTurn > bomb.activatesAtTurn) {
+            bombsToActivate.push({ bomb, targetPlayerId: bomb.targetPlayerId });
+          }
         }
       }
     }
@@ -585,6 +713,7 @@ export async function handleGameEnd(gameId: string, immediateReturnToLobby: bool
       if (playersWhoChoseLobby.length > 0) {
         const newAdmin = playersWhoChoseLobby[0];
         
+        // Réinitialiser les joueurs qui retournent au lobby
         const updatedPlayers = playersWhoChoseLobby.map(player => ({
           ...player,
           board: {
@@ -594,6 +723,8 @@ export async function handleGameEnd(gameId: string, immediateReturnToLobby: bool
           bombsPlaced: [],
           bombsRemaining: game.settings.bombsPerPlayer || 0,
           isAlive: true,
+          skipNextTurns: 0,
+          bonusTurns: 0,
         }));
 
         await updateDoc(doc(db, 'games', gameId), {
@@ -610,38 +741,43 @@ export async function handleGameEnd(gameId: string, immediateReturnToLobby: bool
           currentPlayerIndex: 0,
           currentTurn: 0,
           winnerId: deleteField(),
-          playerChoices: {},
+          playerChoices: {}, // Réinitialiser les choix
           lastActivity: Date.now(),
         });
         return;
       }
     }
 
-    const allPlayersChose = game.players.every(p => choices[p.id] !== undefined);
-
-    if (!allPlayersChose) return; // Attendre que tous les joueurs choisissent
-
-    const allChoseLobby = game.players.every(p => choices[p.id] === 'lobby');
+    // Si un joueur choisit "menu", il quitte la partie
+    // On ne fait rien ici, le joueur sera simplement retiré du lobby s'il n'y retourne pas
+    // Si tous les joueurs ont choisi "menu", supprimer le lobby
     const allChoseMenu = game.players.every(p => choices[p.id] === 'menu');
-
     if (allChoseMenu) {
-      // Supprimer le lobby
       await deleteDoc(doc(db, 'games', gameId));
-    } else if (allChoseLobby) {
-      // Retourner au lobby - réinitialiser la partie
-        const updatedPlayers = game.players.map(player => ({
-          ...player,
-          board: {
-            cells: Array(12).fill(null).map(() => Array(12).fill('empty')),
-            ships: [],
-          },
-          bombsPlaced: [],
-          bombsRemaining: game.settings.bombsPerPlayer || 0,
-          isAlive: true,
-          skipNextTurns: 0, // Réinitialiser les tours à sauter
-        }));
+      return;
+    }
+
+    // Si au moins un joueur a choisi "lobby", on peut retourner au lobby
+    // Les joueurs qui ont choisi "menu" seront simplement absents du lobby
+    const playersWhoChoseLobby = game.players.filter(p => choices[p.id] === 'lobby');
+    if (playersWhoChoseLobby.length > 0) {
+      const newAdmin = playersWhoChoseLobby[0];
+      
+      const updatedPlayers = playersWhoChoseLobby.map(player => ({
+        ...player,
+        board: {
+          cells: Array(12).fill(null).map(() => Array(12).fill('empty')),
+          ships: [],
+        },
+        bombsPlaced: [],
+        bombsRemaining: game.settings.bombsPerPlayer || 0,
+        isAlive: true,
+        skipNextTurns: 0,
+        bonusTurns: 0,
+      }));
 
       await updateDoc(doc(db, 'games', gameId), {
+        adminId: newAdmin.id,
         players: updatedPlayers.map(player => ({
           ...player,
           board: {
@@ -657,44 +793,6 @@ export async function handleGameEnd(gameId: string, immediateReturnToLobby: bool
         playerChoices: {},
         lastActivity: Date.now(),
       });
-    } else {
-      // Cas mixte : certains ont choisi lobby, d'autres menu
-      // Garder seulement les joueurs qui ont choisi lobby
-      const playersWhoChoseLobby = game.players.filter(p => choices[p.id] === 'lobby');
-      
-      if (playersWhoChoseLobby.length > 0) {
-        // Le premier joueur qui a choisi lobby devient admin
-        const newAdmin = playersWhoChoseLobby[0];
-        
-        const updatedPlayers = playersWhoChoseLobby.map(player => ({
-          ...player,
-          board: {
-            cells: Array(12).fill(null).map(() => Array(12).fill('empty')),
-            ships: [],
-          },
-          bombsPlaced: [],
-          bombsRemaining: game.settings.bombsPerPlayer || 0,
-          isAlive: true,
-        }));
-
-        await updateDoc(doc(db, 'games', gameId), {
-          adminId: newAdmin.id,
-          players: updatedPlayers.map(player => ({
-            ...player,
-            board: {
-              ...player.board,
-              cells: cellsToFirestore(player.board.cells),
-            },
-          })),
-          phase: 'lobby',
-          status: 'waiting',
-          currentPlayerIndex: 0,
-          currentTurn: 0,
-          winnerId: deleteField(),
-          playerChoices: {},
-          lastActivity: Date.now(),
-        });
-      }
     }
   } catch (error) {
     console.error('Erreur lors de la gestion de la fin de partie:', error);
