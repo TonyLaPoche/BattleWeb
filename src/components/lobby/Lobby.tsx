@@ -77,9 +77,12 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
           if (loadedGame) {
             setGame(loadedGame);
             setCurrentGame(loadedGame);
+            // Si le jeu n'est pas en phase 'lobby', on attend que subscribeToGame le mette à jour
+            // Ne pas afficher d'erreur immédiatement, le subscribeToGame gérera la redirection si nécessaire
           }
         } catch (error) {
           console.error('Erreur lors du chargement de la partie:', error);
+          setError('Erreur lors du chargement de la partie');
         } finally {
           setLoading(false);
         }
@@ -131,11 +134,21 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
 
       setGame(updatedGame);
 
+      // Si la partie est en phase 'finished', rediriger vers la page de jeu pour afficher les résultats
+      if (updatedGame.phase === 'finished') {
+        router.push(`/game/${updatedGame.id}`);
+        return;
+      }
+
       // Si la partie commence (phase placement ou playing), rediriger vers la page de placement
       if (updatedGame.phase === 'placement' || updatedGame.phase === 'playing') {
         // Utiliser router.push directement au lieu de onGameStart pour éviter les problèmes de timing
         router.push(`/placement?gameId=${updatedGame.id}`);
+        return;
       }
+      
+      // Si la phase est 'lobby', on reste sur la page lobby (pas de redirection)
+      // Le composant affichera l'interface du lobby car game.phase === 'lobby'
     });
 
     return unsubscribe;
@@ -208,7 +221,7 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
   // Si pas de partie, afficher un message avec un bouton retour
   if (!game) {
     // Si on est en train de charger ou de rejoindre une partie, afficher un message de chargement
-    if (loading || (initialCode && playerName)) {
+    if (loading || (initialCode && playerName) || (initialGameId && !game)) {
       return (
         <div className="min-h-screen bg-gray-100 flex items-center justify-center">
           <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
@@ -252,6 +265,30 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
           >
             ← Retour au tableau de bord
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Si la phase n'est pas 'lobby', afficher un message de chargement en attendant que la phase change
+  if (game.phase !== 'lobby') {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
+          <h1 className="text-2xl font-bold text-center mb-4">BattleWeb Lobby</h1>
+          
+          <div className="text-center mb-6">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+            <p className="text-gray-600">
+              {game.phase === 'finished' ? 'Retour au lobby...' : 'Chargement du lobby...'}
+            </p>
+          </div>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+              {error}
+            </div>
+          )}
         </div>
       </div>
     );

@@ -713,8 +713,14 @@ export async function handleGameEnd(gameId: string, immediateReturnToLobby: bool
       if (playersWhoChoseLobby.length > 0) {
         const newAdmin = playersWhoChoseLobby[0];
         
+        // Inclure tous les joueurs (ceux qui ont choisi lobby ET ceux qui n'ont pas encore choisi)
+        // Les joueurs qui ont choisi "menu" seront exclus
+        const playersToKeep = game.players.filter(p => 
+          choices[p.id] === 'lobby' || choices[p.id] === undefined
+        );
+        
         // Réinitialiser les joueurs qui retournent au lobby
-        const updatedPlayers = playersWhoChoseLobby.map(player => ({
+        const updatedPlayers = playersToKeep.map(player => ({
           ...player,
           board: {
             cells: Array(12).fill(null).map(() => Array(12).fill('empty')),
@@ -815,7 +821,13 @@ export async function leaveGame(gameId: string, playerId: string) {
 
     // Si la partie est en cours et qu'un joueur quitte, vérifier si la partie doit se terminer
     let updates: any = {
-      players: updatedPlayers,
+      players: updatedPlayers.map(player => ({
+        ...player,
+        board: {
+          ...player.board,
+          cells: cellsToFirestore(player.board.cells),
+        },
+      })),
       lastActivity: Date.now(),
     };
 

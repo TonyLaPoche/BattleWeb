@@ -75,6 +75,8 @@ export default function GamePage() {
           if (loadedGame.phase !== 'playing') {
             if (loadedGame.phase === 'placement') {
               router.push(`/placement?gameId=${gameId}`);
+            } else if (loadedGame.phase === 'lobby') {
+              router.push(`/lobby?gameId=${gameId}`);
             } else {
               router.push('/dashboard');
             }
@@ -244,9 +246,16 @@ export default function GamePage() {
           }
         }
         
-        // Si le jeu est retourné au lobby, rediriger
-        if (updatedGame.phase === 'lobby' && game?.phase === 'finished') {
-          router.push(`/lobby?gameId=${gameId}`);
+        // Si le jeu est retourné au lobby, rediriger tous les joueurs
+        if (updatedGame.phase === 'lobby') {
+          // Vérifier que le joueur actuel est toujours dans la partie
+          const playerStillInGame = updatedGame.players.some(p => p.id === user?.uid);
+          if (playerStillInGame) {
+            router.push(`/lobby?gameId=${gameId}`);
+          } else {
+            // Le joueur n'est plus dans la partie, rediriger vers le dashboard
+            router.push('/dashboard');
+          }
         }
     });
 
@@ -812,21 +821,30 @@ export default function GamePage() {
 
     try {
       setPlayerChoiceState(choice);
+      // Enregistrer le choix d'abord
       await setPlayerChoice(game.id, user.uid, choice);
+      
+      // Recharger le jeu pour avoir les choix à jour
+      const updatedGame = await getGame(game.id);
+      if (!updatedGame) return;
+      
+      const choices = updatedGame.playerChoices || {};
       
       // Si choix "lobby", retourner immédiatement au lobby sans attendre les autres
       if (choice === 'lobby') {
-        await handleGameEnd(game.id, true); // true = retour immédiat
-        // La redirection sera gérée par le subscribeToGame qui détecte le changement de phase
+        // Vérifier qu'au moins un joueur a choisi lobby (le choix vient d'être enregistré)
+        const playersWhoChoseLobby = updatedGame.players.filter(p => choices[p.id] === 'lobby');
+        if (playersWhoChoseLobby.length > 0) {
+          await handleGameEnd(game.id, true); // true = retour immédiat
+          // La redirection sera gérée par le subscribeToGame qui détecte le changement de phase
+        }
         return;
       }
       
       // Si choix "menu", quitter immédiatement vers le dashboard
       if (choice === 'menu') {
         // Vérifier si tous les joueurs ont choisi menu (suppression du lobby)
-        const choices = game.playerChoices || {};
-        choices[user.uid] = 'menu';
-        const allChoseMenu = game.players.every(p => choices[p.id] === 'menu');
+        const allChoseMenu = updatedGame.players.every(p => choices[p.id] === 'menu');
         
         if (allChoseMenu) {
           // Tous ont choisi menu, supprimer le lobby
@@ -853,6 +871,16 @@ export default function GamePage() {
 
   if (!game || !currentPlayer) {
     return null; // Redirection en cours
+  }
+
+  // Si la phase est 'lobby', ne pas afficher l'interface de jeu (redirection en cours)
+  const gamePhase = game.phase;
+  if (gamePhase === 'lobby') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl">Redirection vers le lobby...</div>
+      </div>
+    );
   }
 
   // Obtenir le gagnant si la partie est terminée
