@@ -1,0 +1,36 @@
+{
+  "name": "BattleWeb - Bataille Navale",
+  "short_name": "BattleWeb",
+  "description": "Jeu de bataille navale multi-joueurs avec mécaniques innovantes",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["games", "entertainment"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Nouvelle partie",
+      "short_name": "Nouvelle partie",
+      "description": "Créer une nouvelle partie",
+      "url": "/dashboard?action=create",
+      "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}
+
