@@ -3,11 +3,13 @@
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { getGame, subscribeToGame, updateGame, placeBomb, defuseBomb, activateBombs, setPlayerChoice, handleGameEnd } from '@/services/gameService';
-import { Game, Player, Position, CellState, Bomb } from '@/types/game';
+import { getGame, subscribeToGame, updateGame, placeBomb, defuseBomb, activateBombs, setPlayerChoice, handleGameEnd, subscribeToChat, sendChatMessage } from '@/services/gameService';
+import { Game, Player, Position, CellState, Bomb, LobbyMessage } from '@/types/game';
 import { Grid } from '@/components/game/Grid';
+import { GameChat } from '@/components/game/GameChat';
 import { saveGameToHistory, GameHistoryEntry } from '@/utils/gameHistory';
 import { updateUserStatsAfterGame } from '@/services/userService';
+import { setInGame, setOnline } from '@/services/presenceService';
 
 // Hook pour calculer la taille des cellules selon la taille d'écran
 function useCellSize() {
@@ -50,6 +52,7 @@ export default function GamePage() {
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null); // Adversaire sélectionné pour attaquer
   const [hasShotThisTurn, setHasShotThisTurn] = useState(false); // Vérifier si on a déjà tiré ce tour
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null); // Temps restant en secondes
+  const [chatMessages, setChatMessages] = useState<LobbyMessage[]>([]); // Messages du chat
   const { cellSize, padding } = useCellSize();
 
   // Charger la partie et écouter les changements
@@ -263,6 +266,44 @@ export default function GamePage() {
       unsubscribe();
     };
   }, [gameId, user, router]);
+
+  // Mettre à jour la présence quand on entre dans une partie
+  useEffect(() => {
+    if (!user || !gameId) return;
+
+    setInGame(user.uid, gameId);
+
+    return () => {
+      // Quand on quitte la page, remettre en ligne
+      setOnline(user.uid);
+    };
+  }, [user, gameId]);
+
+  // Écouter le chat
+  useEffect(() => {
+    if (!gameId) return;
+
+    const unsubscribe = subscribeToChat(gameId, setChatMessages);
+    return unsubscribe;
+  }, [gameId]);
+
+  // Envoyer un message dans le chat
+  const handleSendChatMessage = async (message: string) => {
+    if (!gameId || !user || !currentPlayer) return;
+
+    try {
+      await sendChatMessage(
+        gameId, 
+        user.uid, 
+        currentPlayer.name, 
+        message,
+        'in-game',
+        game?.phase
+      );
+    } catch (error) {
+      console.error('Erreur lors de l\'envoi du message:', error);
+    }
+  };
 
   // Obtenir le joueur actuel
   const currentPlayer = game?.players.find(p => p.id === user?.uid);
@@ -1345,6 +1386,19 @@ export default function GamePage() {
                 })}
             </div>
           </div>
+        </div>
+
+        {/* Chat en jeu */}
+        <div className="mt-6">
+          <GameChat
+            messages={chatMessages}
+            onSendMessage={handleSendChatMessage}
+            currentUserId={user?.uid}
+            canChat={!!currentPlayer}
+            title="Chat en jeu"
+            gamePhase={game.phase}
+            filterByPhase={true}
+          />
         </div>
       </div>
     </div>

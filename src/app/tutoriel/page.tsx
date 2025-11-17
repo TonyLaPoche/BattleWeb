@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useEffect } from 'react';
+import { Navigation } from '@/components/layout/Navigation';
 
 export default function TutorielPage() {
   const router = useRouter();
@@ -27,16 +28,11 @@ export default function TutorielPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-100">
+      <Navigation currentPage="tutoriel" />
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="mb-4 text-blue-600 hover:text-blue-800 font-medium flex items-center gap-2"
-          >
-            ← Retour au tableau de bord
-          </button>
           <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             📚 Tutoriel BattleWeb
           </h1>

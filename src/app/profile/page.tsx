@@ -4,6 +4,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getUserProfile, updateUsername, getUserStats, UserProfile, UserStats } from '@/services/userService';
+import { AddFriend } from '@/components/friends/AddFriend';
+import { FriendsList } from '@/components/friends/FriendsList';
+import { Navigation } from '@/components/layout/Navigation';
 
 export default function ProfilePage() {
   const { user, isAuthenticated } = useAuth();
@@ -31,6 +34,7 @@ export default function ProfilePage() {
         let userProfile = await getUserProfile(user.uid);
         
         // Si le profil n'existe pas, le créer avec le nom par défaut
+        // Cela créera aussi automatiquement friends et user_stats
         if (!userProfile && user.email) {
           const { createOrUpdateUserProfile } = await import('@/services/userService');
           userProfile = await createOrUpdateUserProfile(user.uid, user.email);
@@ -41,7 +45,7 @@ export default function ProfilePage() {
           setUsername(userProfile.username);
         }
         
-        // Charger les statistiques
+        // Charger les statistiques (créées automatiquement à l'inscription)
         const userStats = await getUserStats(user.uid);
         if (userStats) {
           setStats(userStats);
@@ -106,19 +110,7 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 gap-4">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">BattleWeb</h1>
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="bg-blue-500 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
-            >
-              Retour au Dashboard
-            </button>
-          </div>
-        </div>
-      </header>
+      <Navigation currentPage="profile" />
 
       {/* Main content */}
       <main className="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -325,6 +317,25 @@ export default function ProfilePage() {
               </div>
             </div>
           </div>
+
+          {/* Section Amis */}
+          {user && (
+            <div className="mt-6 space-y-6">
+              <div className="bg-white shadow rounded-lg p-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">👥 Amis</h2>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Ajouter un ami */}
+                  <div>
+                    <AddFriend />
+                  </div>
+                  {/* Liste des amis */}
+                  <div>
+                    <FriendsList userId={user.uid} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

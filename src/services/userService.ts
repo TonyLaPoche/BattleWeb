@@ -1,5 +1,6 @@
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, updateDoc, increment } from 'firebase/firestore';
+import { FriendsCollection } from '@/types/friends';
 
 export interface UserProfile {
   id: string;
@@ -27,6 +28,47 @@ export interface UserStats {
   updatedAt: number;
 }
 
+// Initialiser les collections manquantes pour un utilisateur existant
+async function initializeMissingCollections(userId: string): Promise<void> {
+  const now = Date.now();
+  
+  // Vérifier et créer friends si manquant
+  const friendsRef = doc(db, 'friends', userId);
+  const friendsDoc = await getDoc(friendsRef);
+  if (!friendsDoc.exists()) {
+    await setDoc(friendsRef, {
+      userId,
+      friends: [],
+      pendingSent: [],
+      pendingReceived: [],
+      blocked: [],
+      updatedAt: now,
+    } as FriendsCollection);
+  }
+  
+  // Vérifier et créer user_stats si manquant
+  const statsRef = doc(db, 'user_stats', userId);
+  const statsDoc = await getDoc(statsRef);
+  if (!statsDoc.exists()) {
+    await setDoc(statsRef, {
+      userId,
+      gamesPlayed: 0,
+      gamesWon: 0,
+      gamesLost: 0,
+      gamesAbandoned: 0,
+      totalShots: 0,
+      totalHits: 0,
+      totalShipsSunk: 0,
+      totalBombsPlaced: 0,
+      totalBombsDefused: 0,
+      averageAccuracy: 0,
+      winRate: 0,
+      createdAt: now,
+      updatedAt: now,
+    } as UserStats);
+  }
+}
+
 // Obtenir le profil d'un utilisateur
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   try {
@@ -35,6 +77,10 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     if (!userDoc.exists()) {
       return null;
     }
+    
+    // Pour les utilisateurs existants, initialiser les collections manquantes
+    // (cela ne fait rien si elles existent déjà)
+    await initializeMissingCollections(userId);
     
     return userDoc.data() as UserProfile;
   } catch (error) {
@@ -66,7 +112,38 @@ export async function createOrUpdateUserProfile(
         updatedAt: now,
       };
       
-      await setDoc(userRef, newProfile);
+      // Créer toutes les collections liées à l'utilisateur en parallèle
+      await Promise.all([
+        // Profil utilisateur
+        setDoc(userRef, newProfile),
+        // Collection d'amis (vide)
+        setDoc(doc(db, 'friends', userId), {
+          userId,
+          friends: [],
+          pendingSent: [],
+          pendingReceived: [],
+          blocked: [],
+          updatedAt: now,
+        } as FriendsCollection),
+        // Statistiques (déjà géré par createDefaultStats, mais on le fait ici pour être sûr)
+        setDoc(doc(db, 'user_stats', userId), {
+          userId,
+          gamesPlayed: 0,
+          gamesWon: 0,
+          gamesLost: 0,
+          gamesAbandoned: 0,
+          totalShots: 0,
+          totalHits: 0,
+          totalShipsSunk: 0,
+          totalBombsPlaced: 0,
+          totalBombsDefused: 0,
+          averageAccuracy: 0,
+          winRate: 0,
+          createdAt: now,
+          updatedAt: now,
+        } as UserStats),
+      ]);
+      
       return newProfile;
     } else {
       // Mettre à jour le profil existant

@@ -7,9 +7,11 @@ import { cleanupEmptyLobbies, createGame, getActiveGamesForPlayer } from '@/serv
 import { getGameHistory, GameHistoryEntry } from '@/utils/gameHistory';
 import { getUserProfile, createOrUpdateUserProfile } from '@/services/userService';
 import { Game } from '@/types/game';
+import { FriendsList } from '@/components/friends/FriendsList';
+import { Navigation } from '@/components/layout/Navigation';
 
 export default function DashboardPage() {
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
   const [gameHistory, setGameHistory] = useState<GameHistoryEntry[]>([]);
@@ -100,14 +102,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      router.push('/');
-    } catch (error) {
-      console.error('Erreur lors de la déconnexion:', error);
-    }
-  };
 
   if (!isAuthenticated) {
     return null;
@@ -116,33 +110,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-4 gap-4">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">BattleWeb</h1>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
-              <button
-                onClick={() => router.push('/tutoriel')}
-                className="bg-green-500 hover:bg-green-700 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
-              >
-                📚 Tutoriel
-              </button>
-              <button
-                onClick={() => router.push('/profile')}
-                className="bg-blue-500 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
-              >
-                👤 Profil
-              </button>
-              <button
-                onClick={handleLogout}
-                className="bg-red-500 hover:bg-red-700 text-white px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
-              >
-                Déconnexion
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Navigation currentPage="dashboard" />
 
       {/* Main content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
@@ -301,6 +269,16 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+
+          {/* Liste des amis */}
+          {user && (
+            <div className="mt-8">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">
+                👥 Mes Amis
+              </h3>
+              <FriendsList userId={user.uid} />
+            </div>
+          )}
 
           {/* Historique des parties */}
           <div className="mt-8">

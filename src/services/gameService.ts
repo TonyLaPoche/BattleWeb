@@ -231,16 +231,25 @@ export function subscribeToChat(gameId: string, callback: (messages: LobbyMessag
 }
 
 // Envoyer un message dans le chat
-export async function sendChatMessage(gameId: string, playerId: string, playerName: string, message: string) {
+export async function sendChatMessage(
+  gameId: string, 
+  playerId: string, 
+  playerName: string, 
+  message: string,
+  type: 'lobby' | 'in-game' = 'lobby',
+  gamePhase?: 'lobby' | 'placement' | 'playing' | 'finished'
+) {
   const messagesRef = ref(realtimeDb, `games/${gameId}/chat/messages`);
   const newMessageRef = push(messagesRef);
 
-  const chatMessage: LobbyMessage = {
+  const chatMessage: LobbyMessage & { type?: 'lobby' | 'in-game'; gamePhase?: string } = {
     id: newMessageRef.key!,
     playerId,
     playerName,
     message: message.trim(),
     timestamp: Date.now(),
+    type,
+    gamePhase,
   };
 
   await set(newMessageRef, chatMessage);
