@@ -7,7 +7,7 @@ import { subscribeToReceivedFriendRequests } from '@/services/friendService';
 import { FriendRequest } from '@/types/friends';
 
 interface NavigationProps {
-  currentPage?: 'dashboard' | 'profile' | 'tutoriel';
+  currentPage?: 'dashboard' | 'profile' | 'tutoriel' | 'game';
 }
 
 export const Navigation = ({ currentPage }: NavigationProps) => {
