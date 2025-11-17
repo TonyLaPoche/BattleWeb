@@ -242,15 +242,19 @@ export async function sendChatMessage(
   const messagesRef = ref(realtimeDb, `games/${gameId}/chat/messages`);
   const newMessageRef = push(messagesRef);
 
-  const chatMessage: LobbyMessage & { type?: 'lobby' | 'in-game'; gamePhase?: string } = {
+  const chatMessage: any = {
     id: newMessageRef.key!,
     playerId,
     playerName,
     message: message.trim(),
     timestamp: Date.now(),
     type,
-    gamePhase,
   };
+
+  // Ne pas inclure gamePhase si elle est undefined (Firebase ne permet pas undefined)
+  if (gamePhase !== undefined) {
+    chatMessage.gamePhase = gamePhase;
+  }
 
   await set(newMessageRef, chatMessage);
 }
