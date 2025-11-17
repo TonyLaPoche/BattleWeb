@@ -23,15 +23,13 @@ import { subscribeToFriendPresence, getPresence } from './presenceService';
 // Note: La collection est créée automatiquement lors de l'inscription
 // Pour les anciens utilisateurs, elle sera créée à la première utilisation
 async function getFriendsCollection(userId: string): Promise<FriendsCollection> {
-  console.log('[getFriendsCollection] Lecture du document friends/', userId);
   const friendsRef = doc(db, 'friends', userId);
-  
+
   try {
     const friendsDoc = await getDoc(friendsRef);
-    
+
     if (!friendsDoc.exists()) {
       // Pour les anciens utilisateurs, créer la collection à la première utilisation
-      console.log('[getFriendsCollection] Document friends/', userId, 'n\'existe pas. Création pour utilisateur existant...');
       const newCollection: FriendsCollection = {
         userId,
         friends: [],
@@ -40,22 +38,19 @@ async function getFriendsCollection(userId: string): Promise<FriendsCollection> 
         blocked: [],
         updatedAt: Date.now(),
       };
-      
+
       try {
         await setDoc(friendsRef, newCollection);
-        console.log('[getFriendsCollection] Collection créée avec succès');
         return newCollection;
       } catch (error: any) {
-        console.error('[getFriendsCollection] ERREUR lors de la création:', error.message, error.code);
         // Si la création échoue (permissions), retourner une collection vide en mémoire
         // L'utilisateur devra attendre que le propriétaire crée sa collection
         return newCollection;
       }
     }
-    
+
     return friendsDoc.data() as FriendsCollection;
   } catch (error: any) {
-    console.error('[getFriendsCollection] ERREUR pour userId:', userId, ':', error.message, error.code);
     throw error;
   }
 }
@@ -95,56 +90,43 @@ export async function searchUsers(searchQuery: string, currentUserId: string): P
 
 // Envoyer une demande d'ami
 export async function sendFriendRequest(fromUserId: string, toUserId: string): Promise<void> {
-  console.log('[sendFriendRequest] Début - fromUserId:', fromUserId, 'toUserId:', toUserId);
-  
   if (fromUserId === toUserId) {
     throw new Error('Vous ne pouvez pas vous ajouter vous-même comme ami');
   }
 
   try {
     // Vérifier que les utilisateurs existent
-    console.log('[sendFriendRequest] Étape 1: Vérification des utilisateurs...');
     const [fromUserDoc, toUserDoc] = await Promise.all([
       getDoc(doc(db, 'users', fromUserId)),
       getDoc(doc(db, 'users', toUserId)),
     ]);
 
     if (!fromUserDoc.exists() || !toUserDoc.exists()) {
-      console.error('[sendFriendRequest] Utilisateur introuvable - fromUserDoc.exists:', fromUserDoc.exists(), 'toUserDoc.exists:', toUserDoc.exists());
       throw new Error('Utilisateur introuvable');
     }
 
     const fromUser = fromUserDoc.data() as UserProfile;
     const toUser = toUserDoc.data() as UserProfile;
-    console.log('[sendFriendRequest] Étape 1: OK - Utilisateurs trouvés');
 
-  // Vérifier qu'ils ne sont pas déjà amis
-  console.log('[sendFriendRequest] Étape 2: Vérification des collections d\'amis...');
-  const fromFriends = await getFriendsCollection(fromUserId);
-  console.log('[sendFriendRequest] Étape 2a: Collection fromFriends obtenue');
-  
-  const toFriends = await getFriendsCollection(toUserId);
-  console.log('[sendFriendRequest] Étape 2b: Collection toFriends obtenue');
+    // Vérifier qu'ils ne sont pas déjà amis
+    const fromFriends = await getFriendsCollection(fromUserId);
+    const toFriends = await getFriendsCollection(toUserId);
 
     if (fromFriends.friends.some(f => f.userId === toUserId)) {
-      console.error('[sendFriendRequest] Déjà amis');
       throw new Error('Vous êtes déjà amis avec cet utilisateur');
     }
 
     // Vérifier qu'il n'y a pas déjà une demande en attente
     if (fromFriends.pendingSent.includes(toUserId) || toFriends.pendingReceived.includes(fromUserId)) {
-      console.error('[sendFriendRequest] Demande déjà en attente');
       throw new Error('Une demande d\'ami est déjà en attente');
     }
 
     // Vérifier qu'ils ne sont pas bloqués
     if (fromFriends.blocked.includes(toUserId) || toFriends.blocked.includes(fromUserId)) {
-      console.error('[sendFriendRequest] Utilisateur bloqué');
       throw new Error('Cette action n\'est pas possible');
     }
 
     // Créer la demande d'ami
-    console.log('[sendFriendRequest] Étape 3: Création de la demande d\'ami...');
     const requestRef = await addDoc(collection(db, 'friendRequests'), {
       fromUserId,
       fromUsername: fromUser.username,
@@ -153,37 +135,27 @@ export async function sendFriendRequest(fromUserId: string, toUserId: string): P
       status: 'pending',
       createdAt: Date.now(),
     });
-    console.log('[sendFriendRequest] Étape 3: OK - Demande créée avec ID:', requestRef.id);
 
     // Mettre à jour les collections d'amis
-    console.log('[sendFriendRequest] Étape 4: Mise à jour des collections d\'amis...');
-    console.log('[sendFriendRequest] Étape 4a: Mise à jour friends/', fromUserId);
     try {
       await updateDoc(doc(db, 'friends', fromUserId), {
         pendingSent: arrayUnion(toUserId),
         updatedAt: Date.now(),
       });
-      console.log('[sendFriendRequest] Étape 4a: OK - friends/', fromUserId, 'mis à jour');
     } catch (error: any) {
-      console.error('[sendFriendRequest] Étape 4a: ERREUR lors de la mise à jour de friends/', fromUserId, ':', error.message, error.code);
       throw error;
     }
 
-    console.log('[sendFriendRequest] Étape 4b: Mise à jour friends/', toUserId);
     try {
       await updateDoc(doc(db, 'friends', toUserId), {
         pendingReceived: arrayUnion(fromUserId),
         updatedAt: Date.now(),
       });
-      console.log('[sendFriendRequest] Étape 4b: OK - friends/', toUserId, 'mis à jour');
     } catch (error: any) {
-      console.error('[sendFriendRequest] Étape 4b: ERREUR lors de la mise à jour de friends/', toUserId, ':', error.message, error.code);
       throw error;
     }
 
-    console.log('[sendFriendRequest] Succès complet !');
   } catch (error: any) {
-    console.error('[sendFriendRequest] ERREUR GLOBALE:', error.message, error.code, error);
     throw error;
   }
 }
@@ -255,10 +227,6 @@ export async function acceptFriendRequest(fromUserId: string, toUserId: string):
     respondedAt: Date.now(),
   });
 
-  console.log('[acceptFriendRequest] Mise à jour des collections d\'amis...');
-  console.log('[acceptFriendRequest] fromUserId:', fromUserId, 'toUserId:', toUserId);
-  console.log('[acceptFriendRequest] fromFriend:', fromFriend);
-  console.log('[acceptFriendRequest] toFriend:', toFriend);
 
   // Obtenir les collections actuelles pour vérifier et mettre à jour
   const [fromFriendsDoc, toFriendsDoc] = await Promise.all([
@@ -280,9 +248,6 @@ export async function acceptFriendRequest(fromUserId: string, toUserId: string):
   const fromAlreadyHasFriend = fromFriendsList.some(f => f.userId === toUserId);
   const toAlreadyHasFriend = toFriendsList.some(f => f.userId === fromUserId);
 
-  console.log('[acceptFriendRequest] fromAlreadyHasFriend:', fromAlreadyHasFriend);
-  console.log('[acceptFriendRequest] toAlreadyHasFriend:', toAlreadyHasFriend);
-
   // Mettre à jour les collections d'amis
   // Utiliser une approche de mise à jour directe du tableau pour éviter les problèmes avec arrayUnion
   const updatePromises: Promise<void>[] = [];
@@ -297,10 +262,7 @@ export async function acceptFriendRequest(fromUserId: string, toUserId: string):
         friends: updatedFromFriends,
         pendingSent: updatedFromPendingSent,
         updatedAt: Date.now(),
-      }).then(() => {
-        console.log('[acceptFriendRequest] OK - friends/', fromUserId, 'mis à jour');
       }).catch((error: any) => {
-        console.error('[acceptFriendRequest] ERREUR - friends/', fromUserId, ':', error.message, error.code);
         throw error;
       })
     );
@@ -311,8 +273,6 @@ export async function acceptFriendRequest(fromUserId: string, toUserId: string):
       updateDoc(doc(db, 'friends', fromUserId), {
         pendingSent: updatedFromPendingSent,
         updatedAt: Date.now(),
-      }).then(() => {
-        console.log('[acceptFriendRequest] OK - friends/', fromUserId, 'pendingSent mis à jour');
       })
     );
   }
@@ -327,10 +287,7 @@ export async function acceptFriendRequest(fromUserId: string, toUserId: string):
         friends: updatedToFriends,
         pendingReceived: updatedToPendingReceived,
         updatedAt: Date.now(),
-      }).then(() => {
-        console.log('[acceptFriendRequest] OK - friends/', toUserId, 'mis à jour');
       }).catch((error: any) => {
-        console.error('[acceptFriendRequest] ERREUR - friends/', toUserId, ':', error.message, error.code);
         throw error;
       })
     );
@@ -341,14 +298,11 @@ export async function acceptFriendRequest(fromUserId: string, toUserId: string):
       updateDoc(doc(db, 'friends', toUserId), {
         pendingReceived: updatedToPendingReceived,
         updatedAt: Date.now(),
-      }).then(() => {
-        console.log('[acceptFriendRequest] OK - friends/', toUserId, 'pendingReceived mis à jour');
       })
     );
   }
 
   await Promise.all(updatePromises);
-  console.log('[acceptFriendRequest] Succès complet !');
 }
 
 // Refuser une demande d'ami
@@ -427,7 +381,7 @@ export function subscribeToFriends(
       return {
         ...friend,
         status: statusInfo?.status || friend.status || 'offline',
-        currentGameId: statusInfo?.currentGameId !== undefined ? statusInfo.currentGameId : friend.currentGameId,
+        currentGameId: statusInfo?.currentGameId || friend.currentGameId,
       };
     });
   };
@@ -553,6 +507,6 @@ export function subscribeToSentFriendRequests(
 
 // Obtenir la collection d'amis (sans subscription)
 export async function getFriends(userId: string): Promise<FriendsCollection> {
-  return getOrCreateFriendsCollection(userId);
+  return getFriendsCollection(userId);
 }
 

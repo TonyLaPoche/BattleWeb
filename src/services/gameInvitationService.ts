@@ -1,5 +1,6 @@
-import { realtimeDb } from '@/lib/firebase';
-import { ref, set, onValue, off, remove, push } from 'firebase/database';
+import { realtimeDb, auth } from '@/lib/firebase';
+import { ref, set, onValue, off, remove, push, update, get } from 'firebase/database';
+import { onAuthStateChanged } from 'firebase/auth';
 import { getPresence } from './presenceService';
 
 export interface GameInvitation {
@@ -81,12 +82,49 @@ export async function acceptGameInvitation(
     throw new Error('Realtime Database non initialisé');
   }
 
+  if (!auth) {
+    throw new Error('Firebase Auth non initialisé');
+  }
+
+  // Attendre que l'utilisateur soit authentifié
+  // auth.currentUser peut être null même si l'utilisateur est connecté
+  // On attend jusqu'à 5 secondes pour que l'auth soit synchronisé
+  let currentUser = auth.currentUser;
+  if (!currentUser) {
+    // Attendre que l'authentification soit synchronisée
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Timeout: Utilisateur non authentifié après 5 secondes'));
+      }, 5000);
+
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        clearTimeout(timeout);
+        unsubscribe();
+        if (user) {
+          currentUser = user;
+          resolve();
+        } else {
+          reject(new Error('Utilisateur non authentifié'));
+        }
+      });
+    });
+  }
+
+  // Vérifier que l'utilisateur est bien le destinataire
+  if (toUserId !== currentUser.uid) {
+    throw new Error(`Vous n'êtes pas autorisé à modifier cette invitation. toUserId: ${toUserId}, currentUserId: ${currentUser.uid}`);
+  }
+
   const invitationRef = ref(realtimeDb, `gameInvitations/${toUserId}/${invitationId}`);
   
+  
   // Lire l'invitation actuelle
-  const snapshot = await new Promise<any>((resolve) => {
-    onValue(invitationRef, resolve, { onlyOnce: true });
-  });
+  let snapshot;
+  try {
+    snapshot = await get(invitationRef);
+  } catch (error: any) {
+    throw error;
+  }
 
   if (!snapshot.exists()) {
     throw new Error('Invitation introuvable');
@@ -109,7 +147,42 @@ export async function acceptGameInvitation(
     updatedInvitation.gameId = gameId;
   }
 
-  await set(invitationRef, updatedInvitation);
+  // Utiliser update() avec un chemin spécifique pour chaque champ
+  // Cela peut aider avec les règles de sécurité
+  const basePath = `gameInvitations/${toUserId}/${invitationId}`;
+  const updates: Record<string, any> = {};
+
+  updates[`${basePath}/status`] = 'accepted';
+  updates[`${basePath}/respondedAt`] = Date.now();
+
+  if (gameId) {
+    updates[`${basePath}/gameId`] = gameId;
+  }
+  
+  try {
+    // Utiliser update() avec le chemin racine pour mettre à jour plusieurs chemins
+    const rootRef = ref(realtimeDb, '/');
+    await update(rootRef, updates);
+  } catch (updateError: any) {
+    // Essayer avec update() directement sur l'invitation
+    try {
+      const directUpdates: Record<string, any> = {
+        status: 'accepted',
+        respondedAt: Date.now(),
+      };
+      if (gameId) {
+        directUpdates.gameId = gameId;
+      }
+      await update(invitationRef, directUpdates);
+    } catch (updateDirectError: any) {
+      // Dernier recours : set()
+      try {
+        await set(invitationRef, updatedInvitation);
+      } catch (setError: any) {
+        throw setError;
+      }
+    }
+  }
 
   // Supprimer après 10 secondes pour laisser le temps à l'inviteur de récupérer l'ID de la partie
   setTimeout(() => {
@@ -129,9 +202,7 @@ export async function rejectGameInvitation(
   const invitationRef = ref(realtimeDb, `gameInvitations/${toUserId}/${invitationId}`);
   
   // Lire l'invitation actuelle
-  const snapshot = await new Promise<any>((resolve) => {
-    onValue(invitationRef, resolve, { onlyOnce: true });
-  });
+  const snapshot = await get(invitationRef);
 
   if (!snapshot.exists()) {
     throw new Error('Invitation introuvable');
@@ -144,11 +215,13 @@ export async function rejectGameInvitation(
   }
 
   // Mettre à jour le statut
-  await set(invitationRef, {
+  const updatedInvitation: GameInvitation = {
     ...invitation,
     status: 'rejected',
     respondedAt: Date.now(),
-  });
+  };
+  
+  await set(invitationRef, updatedInvitation);
 
   // Supprimer après 5 secondes
   setTimeout(() => {

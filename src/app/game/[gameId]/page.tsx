@@ -545,8 +545,6 @@ export default function GamePage() {
           const playerIndex = updatedPlayers.findIndex(p => p.id === user.uid);
           if (playerIndex !== -1) {
             const remainingBonusTurns = currentPlayer.bonusTurns - 1;
-            console.log('  - [BONUS TURNS] Avant décrémentation:', currentPlayer.bonusTurns);
-            console.log('  - [BONUS TURNS] Après décrémentation:', remainingBonusTurns);
             
             updatedPlayers[playerIndex] = {
               ...currentPlayer,

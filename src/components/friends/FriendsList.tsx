@@ -19,7 +19,7 @@ export const FriendsList = ({ userId, onInviteFriend }: FriendsListProps) => {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
   const [invitingFriendId, setInvitingFriendId] = useState<string | null>(null);
-  const [invitationStatus, setInvitationStatus] = useState<Record<string, 'pending' | 'accepted' | 'rejected'>>({});
+  const [invitationStatus, setInvitationStatus] = useState<Record<string, 'pending' | 'accepted' | 'rejected' | 'expired'>>({});
 
   useEffect(() => {
     if (!userId) return;

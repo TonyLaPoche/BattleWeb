@@ -32,10 +32,11 @@ export const GameInvitationModal = () => {
 
     setProcessing(invitation.id);
     try {
-      // Créer une nouvelle partie avec l'inviteur comme admin
+      // Étape 1: Créer une nouvelle partie avec l'utilisateur actuel comme admin
+      const currentUserName = user.displayName || user.email?.split('@')[0] || 'Joueur';
       const game = await createGame(
-        invitation.fromUserId,
-        invitation.fromUsername,
+        user.uid, // L'utilisateur actuel devient admin
+        currentUserName,
         {
           enableBombs: false,
           bombsPerPlayer: 0,
@@ -44,17 +45,16 @@ export const GameInvitationModal = () => {
         }
       );
 
-      // Rejoindre la partie avec le deuxième joueur (celui qui accepte)
-      await joinGame(game.code, user.uid, user.displayName || user.email?.split('@')[0] || 'Joueur');
+      // Note: L'utilisateur est déjà dans la partie en tant qu'admin, pas besoin de joinGame
 
-      // Accepter l'invitation avec l'ID de la partie pour que l'inviteur puisse être redirigé
+      // Étape 3: Accepter l'invitation avec l'ID de la partie pour que l'inviteur puisse être redirigé
       await acceptGameInvitation(user.uid, invitation.id, game.id);
 
-      // Rediriger vers le lobby
+      // Étape 4: Rediriger vers le lobby
       router.push(`/lobby?gameId=${game.id}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur lors de l\'acceptation de l\'invitation:', error);
-      alert('Erreur lors de l\'acceptation de l\'invitation');
+      alert(`Erreur lors de l'acceptation de l'invitation: ${error.message}`);
       setProcessing(null);
     }
   };

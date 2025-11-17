@@ -1,5 +1,5 @@
 import { realtimeDb } from '@/lib/firebase';
-import { ref, set, onValue, off, onDisconnect } from 'firebase/database';
+import { ref, set, onValue, off, onDisconnect, get } from 'firebase/database';
 import { Presence, FriendStatus } from '@/types/friends';
 
 // Mettre à jour le statut de présence
@@ -72,17 +72,19 @@ export async function getPresence(userId: string): Promise<Presence | null> {
     return null;
   }
 
-  return new Promise((resolve) => {
+  try {
     const presenceRef = ref(realtimeDb, `presence/${userId}`);
+    const snapshot = await get(presenceRef);
     
-    const unsubscribe = onValue(presenceRef, (snapshot) => {
-      const data = snapshot.val();
-      unsubscribe();
-      resolve(data as Presence | null);
-    }, {
-      onlyOnce: true,
-    });
-  });
+    if (snapshot.exists()) {
+      return snapshot.val() as Presence;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Erreur lors de la récupération de la présence:', error);
+    return null;
+  }
 }
 
 // Mettre le statut à "en ligne"
