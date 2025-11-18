@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import '@/app/globals.css'
 import { ServiceWorkerRegistration } from '@/app/sw-register'
+import { GlobalInvitationHandler } from '@/components/layout/GlobalInvitationHandler'
 
 export const metadata: Metadata = {
   title: 'BattleWeb - Jeu de bataille navale multi-joueurs',
@@ -39,6 +40,7 @@ export default function RootLayout({
       <body className="antialiased">
         <ServiceWorkerRegistration />
         {children}
+        <GlobalInvitationHandler />
       </body>
     </html>
   )

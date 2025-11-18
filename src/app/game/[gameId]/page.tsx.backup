@@ -11,7 +11,6 @@ import { GameInterface } from '@/components/game/GameInterface';
 import { saveGameToHistory, GameHistoryEntry } from '@/utils/gameHistory';
 import { updateUserStatsAfterGame } from '@/services/userService';
 import { setInGame, setOnline } from '@/services/presenceService';
-import { Navigation } from '@/components/layout/Navigation';
 
 // Hook pour calculer la taille des cellules selon la taille d'écran
 function useCellSize() {
@@ -311,9 +310,9 @@ export default function GamePage() {
   const currentPlayer = game?.players.find(p => p.id === user?.uid);
   const currentPlayerTurn = game?.players[game.currentPlayerIndex];
   // Le joueur peut jouer seulement s'il est le joueur actuel ET qu'il n'a pas de tours à sauter
-  const isCurrentTurn = !!(game &&
+  const isCurrentTurn = game && 
     game.players[game.currentPlayerIndex]?.id === user?.uid &&
-    (!currentPlayerTurn?.skipNextTurns || currentPlayerTurn.skipNextTurns === 0));
+    (!currentPlayerTurn?.skipNextTurns || currentPlayerTurn.skipNextTurns === 0);
   
   // Obtenir les adversaires (joueurs vivants sauf soi)
   const opponents = game?.players.filter(p => p.id !== user?.uid && p.isAlive) || [];
@@ -956,72 +955,109 @@ export default function GamePage() {
     );
   };
 
-  // Si la partie est terminée, afficher la modale de fin
-  if (game.phase === "finished" && winner) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 py-8">
-        <Navigation currentPage="game" />
-        
-        {/* Modal de fin de partie */}
+  return (
+    <div className="min-h-screen bg-gray-100 py-8">
+      {/* Modal de fin de partie */}
+      {game.phase === 'finished' && winner && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl shadow-2xl p-8 max-w-md w-full border-4 border-yellow-400 animate-scale-in">
+          <div className="bg-gradient-to-br from-white via-yellow-50 to-orange-50 rounded-2xl shadow-2xl p-8 max-w-md w-full border-4 border-yellow-400 animate-scale-in">
             <div className="text-center">
               <div className="text-7xl mb-4 animate-bounce">
-                {isWinner ? "🏆" : "💀"}
+                {isWinner ? '🏆' : '💀'}
               </div>
-              <h2 className="text-4xl font-bold mb-3 bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
-                {isWinner ? "Victoire !" : "Défaite"}
+              <h2 className="text-4xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                {isWinner ? 'Victoire !' : 'Défaite'}
               </h2>
-              <p className="text-slate-300 text-lg mb-6">
-                {isWinner ? "Félicitations ! Vous avez gagné la partie." : `Le gagnant est ${winner.name}`}
+              <p className="text-xl text-gray-700 mb-2">
+                Le joueur
+              </p>
+              <p className="text-2xl font-bold mb-6" style={{ color: winner.color }}>
+                {winner.name}
+              </p>
+              <p className="text-xl text-gray-700 mb-8">
+                a gagné !
               </p>
 
-              {/* Statistiques de la partie */}
-              <div className="bg-slate-700/50 rounded-xl p-4 mb-6 border-2 border-slate-600">
-                <h3 className="font-bold text-slate-200 mb-3">📊 Statistiques</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-slate-400">Tours joués:</span>
-                    <span className="font-semibold text-blue-400 ml-2">{game.currentTurn || 1}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400">Votre précision:</span>
-                    <span className="font-semibold text-green-400 ml-2">N/A</span>
-                  </div>
+              {!hasChosen ? (
+                <div className="space-y-4">
+                  <button
+                    onClick={() => handleEndGameChoice('lobby')}
+                    className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 text-lg"
+                  >
+                    🏠 Retour au Lobby
+                  </button>
+                  <button
+                    onClick={() => handleEndGameChoice('menu')}
+                    className="w-full bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 text-lg"
+                  >
+                    🏡 Retour au Menu
+                  </button>
                 </div>
-              </div>
-
-              {/* Choix de fin de partie */}
-              {!hasChosen && (
-                <div className="space-y-3">
-                  <p className="text-slate-300 font-medium">Que voulez-vous faire ?</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => {
-                        setPlayerChoiceState("lobby");
-                        handleEndGameChoice("lobby");
-                      }}
-                      className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95"
-                    >
-                      🏠 Lobby
-                    </button>
-                    <button
-                      onClick={() => {
-                        setPlayerChoiceState("menu");
-                        handleEndGameChoice("menu");
-                      }}
-                      className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95"
-                    >
-                      🏡 Menu
-                    </button>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+                    <p className="text-gray-700 font-semibold">
+                      Vous avez choisi : <span className="text-blue-600 font-bold">{playerChoice === 'lobby' ? '🏠 Lobby' : '🏡 Menu'}</span>
+                    </p>
+                    {playerChoice === 'lobby' && (
+                      <p className="text-sm text-gray-600 mt-2">
+                        Vous êtes retourné au lobby. L'autre joueur peut vous y rejoindre.
+                      </p>
+                    )}
+                    {playerChoice === 'menu' && (
+                      <p className="text-sm text-gray-600 mt-2">
+                        Vous avez quitté la partie.
+                      </p>
+                    )}
                   </div>
-
-                  {/* Si le joueur a choisi menu mais que l autre est au lobby, proposer de le rejoindre */}
-                  {playerChoice === "menu" && otherPlayersChoices.some(({ choice }) => choice === "lobby") && (
+                  
+                  {/* Afficher l'état des autres joueurs */}
+                  {otherPlayersChoices.length > 0 && (
+                    <div className="space-y-2">
+                      {otherPlayersChoices.map(({ player, choice }) => (
+                        <div
+                          key={player.id}
+                          className={`p-4 rounded-lg border-2 ${
+                            choice === 'lobby'
+                              ? 'bg-green-50 border-green-200'
+                              : choice === 'menu'
+                              ? 'bg-red-50 border-red-200'
+                              : 'bg-yellow-50 border-yellow-200'
+                          }`}
+                        >
+                          <p className="text-gray-700 font-semibold flex items-center">
+                            <span className="font-bold mr-2" style={{ color: player.color }}>
+                              {player.name}
+                            </span>
+                            {choice === 'lobby' && (
+                              <>
+                                <span className="text-green-600 font-bold">🏠 Retourné au lobby</span>
+                                {playerChoice === 'lobby' && (
+                                  <span className="ml-2 text-sm text-green-600">(Vous pouvez le rejoindre)</span>
+                                )}
+                              </>
+                            )}
+                            {choice === 'menu' && (
+                              <span className="text-red-600 font-bold">🏡 A quitté la partie</span>
+                            )}
+                            {!choice && (
+                              <>
+                                <span className="animate-spin mr-2">⏳</span>
+                                <span className="text-yellow-600">En attente de son choix...</span>
+                              </>
+                            )}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Si le joueur a choisi menu mais que l'autre est au lobby, proposer de le rejoindre */}
+                  {playerChoice === 'menu' && otherPlayersChoices.some(({ choice }) => choice === 'lobby') && (
                     <button
                       onClick={() => {
-                        setPlayerChoiceState("lobby");
-                        handleEndGameChoice("lobby");
+                        setPlayerChoiceState('lobby');
+                        handleEndGameChoice('lobby');
                       }}
                       className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95"
                     >
@@ -1030,72 +1066,340 @@ export default function GamePage() {
                   )}
                 </div>
               )}
-
-              {/* Afficher le choix du joueur */}
-              {hasChosen && (
-                <div className="bg-blue-600/20 border-2 border-blue-500 rounded-xl p-4">
-                  <p className="text-slate-300 font-medium">
-                    Vous avez choisi : <span className="text-blue-400 font-bold">{playerChoice === "lobby" ? "🏠 Lobby" : "🏡 Menu"}</span>
-                  </p>
-                  {playerChoice === "lobby" && (
-                    <p className="text-sm text-slate-400 mt-2">
-                      Vous êtes retourné au lobby. L autre joueur peut vous y rejoindre.
-                    </p>
-                  )}
-                  {playerChoice === "menu" && (
-                    <p className="text-sm text-slate-400 mt-2">
-                      Vous avez quitté la partie.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Afficher l état des autres joueurs */}
-              {otherPlayersChoices.length > 0 && (
-                <div className="space-y-2">
-                  {otherPlayersChoices.map(({ player, choice }) => (
-                    <div
-                      key={player.id}
-                      className="bg-slate-700/30 border-2 border-slate-600 rounded-lg p-3 text-sm"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: player.color }}></span>
-                        <span className="font-medium text-slate-300">{player.name}</span>
-                      </div>
-                      <div className="text-slate-400 mt-1">
-                        {choice === "lobby" ? "🏠 A rejoint le lobby" :
-                         choice === "menu" ? "🏡 A quitté la partie" :
-                         "⏳ En attente de choix..."}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>
-      </div>
-    );
-  }
+      )}
 
-  // Interface de jeu normale
-  return (
-    <GameInterface
-      game={game}
-      currentPlayer={currentPlayer}
-      opponents={opponents}
-      isCurrentTurn={isCurrentTurn}
-      hasShotThisTurn={hasShotThisTurn}
-      actionMode={actionMode}
-      selectedTarget={selectedTarget}
-      error={error}
-      turnTimeLimit={game.settings.turnTimeLimit}
-      chatMessages={chatMessages}
-      onCellClick={handleCellClick}
-      onSendChatMessage={handleSendChatMessage}
-      onActionModeChange={setActionMode}
-      onTargetSelect={setSelectedTarget}
-      onDefuseBomb={handleDefuseBomb}
-      onSurrender={handleSurrender}
-    />
-  );}
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-3 sm:mb-4 text-center sm:text-left">
+            ⚔️ Partie en cours
+          </h1>
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 sm:gap-4">
+            <div className={`px-3 sm:px-5 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base shadow-lg transition-all ${
+              isCurrentTurn 
+                ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse' 
+                : currentPlayerTurn?.id === user?.uid && currentPlayerTurn?.skipNextTurns && currentPlayerTurn.skipNextTurns > 0
+                ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white'
+                : 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700'
+            }`}>
+              {isCurrentTurn ? (
+                currentPlayer?.bonusTurns && currentPlayer.bonusTurns > 0
+                  ? `🎯 C'est votre tour ! (${currentPlayer.bonusTurns} tour${currentPlayer.bonusTurns > 1 ? 's' : ''} bonus restant${currentPlayer.bonusTurns > 1 ? 's' : ''})`
+                  : '🎯 C\'est votre tour !'
+              ) : currentPlayerTurn?.id === user?.uid && currentPlayerTurn?.skipNextTurns && currentPlayerTurn.skipNextTurns > 0 ? (
+                `⏸️ Vous sautez ${currentPlayerTurn.skipNextTurns} tour${currentPlayerTurn.skipNextTurns > 1 ? 's' : ''} (désamorçage)`
+              ) : (
+                `⏳ Tour de ${currentPlayerTurn?.name || '...'}`
+              )}
+            </div>
+            <div className="px-3 sm:px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 text-gray-700 font-semibold text-sm sm:text-base">
+              👥 Joueurs vivants: <span className="text-blue-600">{game.players.filter(p => p.isAlive).length}/{game.players.length}</span>
+            </div>
+            
+            {/* Timer du tour */}
+            {timeRemaining !== null && game.settings.turnTimeLimit > 0 && (
+              <div className={`px-3 sm:px-4 py-2 rounded-lg font-bold text-sm sm:text-base shadow-lg transition-all ${
+                timeRemaining <= 10
+                  ? 'bg-gradient-to-r from-red-500 to-red-600 text-white animate-pulse'
+                  : timeRemaining <= 20
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white'
+                  : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
+              }`}>
+                ⏱️ {timeRemaining}s
+              </div>
+            )}
+            
+            {/* Bouton Abandonner */}
+            {game.phase === 'playing' && currentPlayer && currentPlayer.isAlive && (
+              <button
+                onClick={handleSurrender}
+                className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+                title="Abandonner la partie"
+              >
+                🏳️ Abandonner
+              </button>
+            )}
+            
+            {/* Boutons Tir/Bombe */}
+            {isCurrentTurn && !hasShotThisTurn && (
+              <div className="flex flex-wrap items-center gap-3 justify-center sm:justify-start">
+                {game.settings.enableBombs && game.settings.bombsPerPlayer > 0 && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setActionMode('shot');
+                        setSelectedTarget(null);
+                        setError('');
+                      }}
+                      className={`px-4 sm:px-5 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all shadow-lg ${
+                        actionMode === 'shot'
+                          ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white scale-105 ring-4 ring-blue-300'
+                          : 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700 hover:from-gray-300 hover:to-gray-400 hover:scale-105'
+                      }`}
+                    >
+                      🎯 Tir
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActionMode('bomb');
+                        setSelectedTarget(null);
+                        setError('');
+                      }}
+                      disabled={currentPlayer.bombsRemaining <= 0}
+                      className={`px-4 sm:px-5 py-2 sm:py-3 rounded-xl font-bold text-sm sm:text-base transition-all shadow-lg ${
+                        actionMode === 'bomb'
+                          ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white scale-105 ring-4 ring-orange-300'
+                          : currentPlayer.bombsRemaining > 0
+                          ? 'bg-gradient-to-r from-gray-200 to-gray-300 text-gray-700 hover:from-gray-300 hover:to-gray-400 hover:scale-105'
+                          : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      💣 Bombe <span className="ml-1 bg-white/30 px-2 py-0.5 rounded-full">({currentPlayer.bombsRemaining})</span>
+                    </button>
+                  </>
+                )}
+                {hasShotThisTurn && (
+                  <div className="px-4 py-2 bg-yellow-100 border-2 border-yellow-400 text-yellow-800 rounded-lg font-semibold">
+                    ✓ Tir effectué ce tour
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Légende des couleurs */}
+        <div className="mb-4 sm:mb-6 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg border-2 border-gray-200 p-3 sm:p-5">
+          <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-3 sm:mb-4 text-center sm:text-left">🎨 Légende</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-4">
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-red-600 border-2 border-red-700 rounded shadow-inner"></div>
+              <span className="text-sm text-gray-700 font-medium">Touché</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-sky-300 border-2 border-sky-400 rounded"></div>
+              <span className="text-sm text-gray-700 font-medium">Raté</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-blue-100 border-2 border-blue-200 rounded"></div>
+              <span className="text-sm text-gray-700 font-medium">Eau</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-amber-400 border-2 border-amber-500 rounded shadow-md"></div>
+              <span className="text-sm text-gray-700 font-medium">Révélé (navire)</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-cyan-200 border-2 border-cyan-300 rounded"></div>
+              <span className="text-sm text-gray-700 font-medium">Révélé (vide)</span>
+            </div>
+            {game.settings.enableBombs && game.settings.bombsPerPlayer > 0 && (
+              <div className="flex items-center space-x-2">
+                <div className="w-6 h-6 bg-orange-500 border-2 border-orange-600 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg">
+                  💣
+                </div>
+                <span className="text-sm text-gray-700 font-medium">Bombe active</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-4 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-300 text-red-700 rounded-xl shadow-lg">
+            <div className="flex items-center">
+              <span className="text-xl mr-2">⚠️</span>
+              <span className="font-semibold">{error}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Sélecteur d'adversaire (si c'est votre tour et mode tir) */}
+        {isCurrentTurn && actionMode === 'shot' && !hasShotThisTurn && opponents.length > 1 && (
+          <div className="mb-4 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-lg border-2 border-blue-200">
+            <h3 className="text-lg font-bold text-blue-900 mb-3 text-center sm:text-left">
+              🎯 Sélectionnez un adversaire à attaquer
+            </h3>
+            <div className="flex flex-wrap gap-3 justify-center sm:justify-start">
+              {opponents.map((opponent) => (
+                <button
+                  key={opponent.id}
+                  onClick={() => {
+                    setSelectedTarget(opponent.id);
+                    setError('');
+                  }}
+                  className={`px-4 py-2 rounded-lg font-semibold transition-all shadow-md ${
+                    selectedTarget === opponent.id
+                      ? 'bg-gradient-to-r from-red-500 to-red-600 text-white scale-105 ring-4 ring-red-300'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border-2 border-gray-300'
+                  }`}
+                  style={selectedTarget !== opponent.id ? { borderColor: opponent.color } : {}}
+                >
+                  <span className="w-3 h-3 rounded-full inline-block mr-2" style={{ backgroundColor: opponent.color }}></span>
+                  {opponent.name}
+                </button>
+              ))}
+            </div>
+            {selectedTarget && (
+              <p className="mt-3 text-sm text-blue-700 text-center sm:text-left">
+                ✓ Adversaire sélectionné : <span className="font-bold">{opponents.find(o => o.id === selectedTarget)?.name}</span>
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Grilles des adversaires */}
+        <div className={`grid gap-4 sm:gap-6 mb-6 ${
+          opponents.length === 1 
+            ? 'grid-cols-1' 
+            : opponents.length === 2 
+            ? 'grid-cols-1 lg:grid-cols-2' 
+            : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3'
+        }`}>
+          {opponents.map((opponent) => (
+            <div key={opponent.id} className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-xl border-2 border-gray-200 p-3 sm:p-6">
+              <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-4 flex items-center justify-center sm:justify-start" style={{ color: opponent.color }}>
+                <span className="w-3 h-3 sm:w-4 sm:h-4 rounded-full mr-2" style={{ backgroundColor: opponent.color }}></span>
+                {opponent.name}
+                {!opponent.isAlive && <span className="ml-2 text-red-500 text-lg sm:text-xl">💀</span>}
+              </h2>
+              
+              <div className="flex justify-center relative overflow-x-auto">
+                <div className="inline-block relative">
+                  <Grid
+                    cells={getOpponentGrid(opponent)}
+                    onCellClick={
+                      isCurrentTurn && opponent.isAlive && !hasShotThisTurn
+                        ? actionMode === 'shot'
+                          ? (opponents.length === 1 || selectedTarget === opponent.id)
+                            ? (x, y) => handleCellClick(opponent.id, x, y)
+                            : undefined
+                          : (x, y) => handleBombPlace(opponent.id, x, y)
+                        : undefined
+                    }
+                    interactive={!!(isCurrentTurn && opponent.isAlive && !hasShotThisTurn && (actionMode === 'bomb' || opponents.length === 1 || selectedTarget === opponent.id))}
+                    showCoordinates={true}
+                    className={`shadow-md ${(opponents.length === 1 || selectedTarget === opponent.id) && isCurrentTurn && actionMode === 'shot' ? 'ring-4 ring-red-400 ring-opacity-50' : ''}`}
+                  />
+                  
+                  {/* Afficher les bombes actives sur cette grille */}
+                  {game.players
+                    .flatMap(p => p.bombsPlaced.filter(b => b.targetPlayerId === opponent.id && !b.detonated && !b.defused))
+                    .map(bomb => {
+                      const turnsRemaining = Math.max(0, bomb.activatesAtTurn - (game.currentTurn || 0));
+                      // Calcul du positionnement relatif à la grille en pourcentage
+                      const gridSize = 12; // BOARD_SIZE
+                      const cellWidthPercent = 100 / (gridSize + 1); // +1 pour la colonne de coordonnées
+                      const cellHeightPercent = 100 / (gridSize + 1); // +1 pour la ligne de coordonnées
+                      
+                      // Position en pourcentage : coordonnées (1 cellule) + position de la bombe
+                      const leftPercent = cellWidthPercent + (bomb.position.x * cellWidthPercent) + (cellWidthPercent / 2);
+                      const topPercent = cellHeightPercent + (bomb.position.y * cellHeightPercent) + (cellHeightPercent / 2);
+                      
+                      return (
+                        <div
+                          key={bomb.id}
+                          className="absolute bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center border-2 sm:border-4 border-white shadow-xl z-10 animate-pulse pointer-events-none"
+                          style={{
+                            left: `${leftPercent}%`,
+                            top: `${topPercent}%`,
+                            transform: 'translate(-50%, -50%)',
+                          }}
+                          title={`💣 Bombe - Activation dans ${turnsRemaining} tour${turnsRemaining > 1 ? 's' : ''}`}
+                        >
+                          <span className="text-sm sm:text-lg">💣</span>
+                          <span className="absolute -bottom-1 -right-1 bg-red-600 text-white text-[8px] sm:text-[10px] font-bold rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center border-2 border-white">
+                            {turnsRemaining}
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Statistiques */}
+              <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                <div className="text-sm font-semibold text-gray-700">
+                  ⚓ Navires coulés: <span className="text-blue-600">{opponent.board.ships.filter(s => s.sunk).length}/{opponent.board.ships.length}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Votre grille (pour référence) */}
+        <div className="mt-4 sm:mt-8 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-xl border-2 border-gray-200 p-3 sm:p-6">
+          <h2 className="text-lg sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-800 text-center sm:text-left">⚓ Votre grille</h2>
+          <div className="flex justify-center relative overflow-x-auto">
+            <div className="inline-block relative">
+              <Grid
+                cells={currentPlayer.board.cells}
+                showCoordinates={true}
+                className="shadow-md"
+              />
+              
+              {/* Afficher les bombes actives sur votre grille avec bouton de désamorçage */}
+              {game.players
+                .flatMap(p => p.bombsPlaced.filter(b => b.targetPlayerId === user?.uid && !b.detonated && !b.defused))
+                .map(bomb => {
+                  const turnsRemaining = Math.max(0, bomb.activatesAtTurn - (game.currentTurn || 0));
+                  const bombOwner = game.players.find(p => p.id === bomb.ownerId);
+                  // Calcul du positionnement relatif à la grille
+                  // Utiliser un pourcentage pour s'adapter à la taille réelle de la grille
+                  const gridSize = 12; // BOARD_SIZE
+                  const cellWidthPercent = 100 / (gridSize + 1); // +1 pour la colonne de coordonnées
+                  const cellHeightPercent = 100 / (gridSize + 1); // +1 pour la ligne de coordonnées
+                  
+                  // Position en pourcentage : coordonnées (1 cellule) + position de la bombe
+                  const leftPercent = cellWidthPercent + (bomb.position.x * cellWidthPercent) + (cellWidthPercent / 2);
+                  const topPercent = cellHeightPercent + (bomb.position.y * cellHeightPercent) + (cellHeightPercent / 2);
+                  
+                  return (
+                    <div
+                      key={bomb.id}
+                      className="absolute z-10 flex flex-col items-center pointer-events-none"
+                      style={{
+                        left: `${leftPercent}%`,
+                        top: `${topPercent}%`,
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                    >
+                      <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center border-2 sm:border-4 border-white shadow-xl mb-2 animate-pulse pointer-events-auto">
+                        <span className="text-sm sm:text-lg">💣</span>
+                        <span className="absolute -bottom-1 -right-1 bg-red-600 text-white text-[8px] sm:text-[10px] font-bold rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center border-2 border-white">
+                          {turnsRemaining}
+                        </span>
+                      </div>
+                      {isCurrentTurn && (
+                        <button
+                          onClick={() => handleDefuseBomb(bomb.id)}
+                          className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg shadow-lg whitespace-nowrap transition-all hover:scale-105 active:scale-95 pointer-events-auto"
+                          title={`Désamorcer la bombe de ${bombOwner?.name || 'l\'adversaire'}`}
+                        >
+                          ✂️ Désamorcer
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+
+        {/* Chat en jeu */}
+        <div className="mt-6">
+          <GameChat
+            messages={chatMessages}
+            onSendMessage={handleSendChatMessage}
+            currentUserId={user?.uid}
+            canChat={!!currentPlayer}
+            title="Chat en jeu"
+            gamePhase={game.phase}
+            filterByPhase={true}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

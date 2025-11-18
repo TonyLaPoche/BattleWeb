@@ -75,8 +75,24 @@ export const Lobby = ({ game: initialGame, onGameStart, initialCode, initialGame
         try {
           const loadedGame = await getGame(initialGameId);
           if (loadedGame) {
-            setGame(loadedGame);
-            setCurrentGame(loadedGame);
+            // Vérifier si l'utilisateur actuel est dans la partie
+            const isUserInGame = loadedGame.players.some(p => p.id === user.uid);
+
+            if (!isUserInGame) {
+              // Si l'utilisateur n'est pas dans la partie, le faire rejoindre
+              const playerName = user.displayName || user.email?.split('@')[0] || 'Joueur';
+              const joinedGame = await joinGame(loadedGame.code, user.uid, playerName);
+              if (joinedGame) {
+                setGame(joinedGame);
+                setCurrentGame(joinedGame);
+              } else {
+                throw new Error('Impossible de rejoindre la partie');
+              }
+            } else {
+              // L'utilisateur est déjà dans la partie
+              setGame(loadedGame);
+              setCurrentGame(loadedGame);
+            }
             // Si le jeu n'est pas en phase 'lobby', on attend que subscribeToGame le mette à jour
             // Ne pas afficher d'erreur immédiatement, le subscribeToGame gérera la redirection si nécessaire
           }

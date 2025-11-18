@@ -3,6 +3,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndP
 import { auth } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/authStore';
 import { createOrUpdateUserProfile } from '@/services/userService';
+import { setOnline, setOffline } from '@/services/presenceService';
 
 export const useAuth = () => {
   const { user, loading, setUser, setLoading } = useAuthStore();
@@ -24,6 +25,14 @@ export const useAuth = () => {
       setUser(user);
       setLoading(false);
       clearTimeout(timeout);
+      
+      // Mettre à jour la présence
+      if (user) {
+        setOnline(user.uid);
+      } else {
+        // Si l'utilisateur se déconnecte, la présence sera mise à jour automatiquement
+        // via onDisconnect dans presenceService
+      }
     });
 
     return () => {

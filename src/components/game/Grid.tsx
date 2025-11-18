@@ -10,6 +10,7 @@ interface GridProps {
   onDrop?: (x: number, y: number) => void;
   interactive?: boolean;
   showCoordinates?: boolean;
+  size?: 'normal' | 'small';
   className?: string;
 }
 
@@ -21,6 +22,7 @@ export const Grid = ({
   onDrop,
   interactive = false,
   showCoordinates = true,
+  size = 'normal',
   className = ""
 }: GridProps) => {
   const getCellColor = (state: CellState): string => {
@@ -81,9 +83,18 @@ export const Grid = ({
     }
   };
 
+  // Configuration des tailles selon le mode
+  const cellSizeClass = size === 'small'
+    ? 'min-w-[12px] min-h-[12px] sm:min-w-[16px] sm:min-h-[16px]'
+    : 'min-w-[20px] min-h-[20px] sm:min-w-[24px] sm:min-h-[24px] md:min-w-[32px] md:min-h-[32px]';
+
+  const gapClass = size === 'small' ? 'gap-0.5' : 'gap-0.5 sm:gap-1';
+  const paddingClass = size === 'small' ? 'p-1 sm:p-2' : 'p-2 sm:p-4';
+  const textSizeClass = size === 'small' ? 'text-[8px] sm:text-[10px]' : 'text-[10px] sm:text-xs md:text-sm';
+
   return (
     <div className={`inline-block w-full max-w-full ${className}`}>
-      <div className="grid gap-0.5 sm:gap-1 p-2 sm:p-4 bg-gradient-to-br from-blue-800 to-blue-900 rounded-lg shadow-xl border-2 border-blue-700 mx-auto"
+      <div className={`grid ${gapClass} ${paddingClass} bg-gradient-to-br from-blue-800 to-blue-900 rounded-lg shadow-xl border-2 border-blue-700 mx-auto`}
            style={{
              gridTemplateColumns: showCoordinates ? `auto repeat(${BOARD_SIZE}, minmax(0, 1fr))` : `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
              gridTemplateRows: showCoordinates ? `auto repeat(${BOARD_SIZE}, minmax(0, 1fr))` : `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
@@ -93,9 +104,9 @@ export const Grid = ({
         {/* Coordonnées des colonnes (A-L) */}
         {showCoordinates && (
           <>
-            <div className="min-w-[20px] min-h-[20px] sm:min-w-[24px] sm:min-h-[24px] md:min-w-[32px] md:min-h-[32px] aspect-square"></div> {/* Coin supérieur gauche vide */}
+            <div className={`${cellSizeClass} aspect-square`}></div> {/* Coin supérieur gauche vide */}
             {Array.from({ length: BOARD_SIZE }, (_, i) => (
-              <div key={`col-${i}`} className="min-w-[20px] min-h-[20px] sm:min-w-[24px] sm:min-h-[24px] md:min-w-[32px] md:min-h-[32px] aspect-square flex items-center justify-center text-white font-bold text-[10px] sm:text-xs md:text-sm bg-blue-700/50 rounded">
+              <div key={`col-${i}`} className={`${cellSizeClass} aspect-square flex items-center justify-center text-white font-bold ${textSizeClass} bg-blue-700/50 rounded`}>
                 {String.fromCharCode(65 + i)} {/* A, B, C, ... L */}
               </div>
             ))}
@@ -107,7 +118,7 @@ export const Grid = ({
           <div key={`row-${y}`} className="contents">
             {/* Coordonnée de la ligne (1-12) */}
             {showCoordinates && (
-              <div className="min-w-[20px] min-h-[20px] sm:min-w-[24px] sm:min-h-[24px] md:min-w-[32px] md:min-h-[32px] aspect-square flex items-center justify-center text-white font-bold text-[10px] sm:text-xs md:text-sm bg-blue-700/50 rounded">
+              <div className={`${cellSizeClass} aspect-square flex items-center justify-center text-white font-bold ${textSizeClass} bg-blue-700/50 rounded`}>
                 {y + 1}
               </div>
             )}
@@ -120,7 +131,7 @@ export const Grid = ({
                 data-x={x}
                 data-y={y}
                 className={`
-                  min-w-[20px] min-h-[20px] sm:min-w-[24px] sm:min-h-[24px] md:min-w-[32px] md:min-h-[32px] aspect-square border border-1 sm:border-2 rounded transition-all duration-200 touch-none
+                  ${cellSizeClass} aspect-square border border-1 sm:border-2 rounded transition-all duration-200 touch-none
                   ${getCellColor(cell)}
                   ${getCellCursor(cell)}
                   ${onCellClick && cell !== 'hit' && cell !== 'miss' && cell !== 'revealed' && cell !== 'revealed_ship' && cell !== 'revealed_empty' ? 'hover:scale-110 active:scale-95 hover:shadow-lg' : ''}
