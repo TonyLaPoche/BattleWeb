@@ -57,6 +57,91 @@ export const Navigation = ({ currentPage }: NavigationProps) => {
             </span>
           </button>
 
+          {/* Notifications */}
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="relative px-4 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105 flex items-center gap-2 min-w-[120px] justify-center"
+            >
+              <span className="text-lg">🔔</span>
+              <span className="hidden lg:inline">Notifications</span>
+              {pendingCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center shadow-lg animate-pulse">
+                  {pendingCount > 9 ? '9+' : pendingCount}
+                </span>
+              )}
+            </button>
+
+            {/* Menu déroulant des notifications */}
+            {showNotifications && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowNotifications(false)}
+                />
+                <div className="absolute right-0 mt-2 w-80 bg-gray-800 rounded-lg shadow-2xl z-20 border-2 border-blue-500">
+                  <div className="p-4 border-b border-gray-700">
+                    <h3 className="font-bold text-white text-lg">
+                      🔔 Demandes d'ami
+                      {pendingCount > 0 && (
+                        <span className="ml-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                          {pendingCount}
+                        </span>
+                      )}
+                    </h3>
+                  </div>
+
+                  {pendingCount === 0 ? (
+                    <div className="p-6 text-center text-gray-400 text-sm">
+                      Aucune demande d'ami en attente
+                    </div>
+                  ) : (
+                    <div className="max-h-96 overflow-y-auto">
+                      {friendRequests.map((request) => (
+                        <div
+                          key={request.id}
+                          className="p-4 border-b border-gray-700 hover:bg-gray-700 transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-white truncate">
+                                {request.fromUsername}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-1">
+                                vous a envoyé une demande d'ami
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                router.push('/profile');
+                                setShowNotifications(false);
+                              }}
+                              className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors whitespace-nowrap font-semibold"
+                            >
+                              Voir
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="p-3 border-t border-gray-700">
+                    <button
+                      onClick={() => {
+                        router.push('/profile');
+                        setShowNotifications(false);
+                      }}
+                      className="w-full text-center text-sm text-blue-400 hover:text-blue-300 font-semibold py-2 transition-colors"
+                    >
+                      Voir toutes les demandes →
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Navigation Links */}
           <nav className="flex items-center gap-3">
             {currentPage !== 'tutoriel' && (
@@ -68,90 +153,7 @@ export const Navigation = ({ currentPage }: NavigationProps) => {
               </button>
             )}
 
-            {/* Notifications */}
-            <div className="relative">
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105 flex items-center gap-2 min-w-[120px] justify-center"
-              >
-                <span className="text-lg">🔔</span>
-                <span className="hidden lg:inline">Notifications</span>
-                {pendingCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-6 w-6 flex items-center justify-center shadow-lg animate-pulse">
-                    {pendingCount > 9 ? '9+' : pendingCount}
-                  </span>
-                )}
-              </button>
 
-              {/* Menu déroulant des notifications */}
-              {showNotifications && (
-                <>
-                  <div
-                    className="fixed inset-0 z-10"
-                    onClick={() => setShowNotifications(false)}
-                  />
-                  <div className="absolute right-0 mt-2 w-80 bg-gray-800 rounded-lg shadow-2xl z-20 border-2 border-blue-500">
-                    <div className="p-4 border-b border-gray-700">
-                      <h3 className="font-bold text-white text-lg">
-                        🔔 Demandes d'ami
-                        {pendingCount > 0 && (
-                          <span className="ml-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                            {pendingCount}
-                          </span>
-                        )}
-                      </h3>
-                    </div>
-                    
-                    {pendingCount === 0 ? (
-                      <div className="p-6 text-center text-gray-400 text-sm">
-                        Aucune demande d'ami en attente
-                      </div>
-                    ) : (
-                      <div className="max-h-96 overflow-y-auto">
-                        {friendRequests.map((request) => (
-                          <div
-                            key={request.id}
-                            className="p-4 border-b border-gray-700 hover:bg-gray-700 transition-colors"
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-white truncate">
-                                  {request.fromUsername}
-                                </p>
-                                <p className="text-xs text-gray-400 mt-1">
-                                  vous a envoyé une demande d'ami
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => {
-                                  router.push('/profile');
-                                  setShowNotifications(false);
-                                }}
-                                className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors whitespace-nowrap font-semibold"
-                              >
-                                Voir
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    <div className="p-3 border-t border-gray-700">
-                      <button
-                        onClick={() => {
-                          router.push('/profile');
-                          setShowNotifications(false);
-                        }}
-                        className="w-full text-center text-sm text-blue-400 hover:text-blue-300 font-semibold py-2 transition-colors"
-                      >
-                        Voir toutes les demandes →
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
 
             {currentPage !== 'profile' && (
               <button
@@ -161,7 +163,7 @@ export const Navigation = ({ currentPage }: NavigationProps) => {
                 👤 Profil
               </button>
             )}
-            
+
             {currentPage === 'profile' && (
               <button
                 onClick={() => router.push('/dashboard')}
@@ -170,7 +172,7 @@ export const Navigation = ({ currentPage }: NavigationProps) => {
                 🏠 Dashboard
               </button>
             )}
-            
+
             <button
               onClick={handleLogout}
               className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-105 text-sm"
@@ -227,7 +229,7 @@ export const Navigation = ({ currentPage }: NavigationProps) => {
                           )}
                         </h3>
                       </div>
-                      
+
                       {pendingCount === 0 ? (
                         <div className="p-6 text-center text-gray-400 text-sm">
                           Aucune demande d'ami en attente
@@ -262,7 +264,7 @@ export const Navigation = ({ currentPage }: NavigationProps) => {
                           ))}
                         </div>
                       )}
-                      
+
                       <div className="p-3 border-t border-gray-700">
                         <button
                           onClick={() => {
